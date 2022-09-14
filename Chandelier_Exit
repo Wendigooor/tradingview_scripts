@@ -1,0 +1,131 @@
+1. EURUSD 5m
+ATR Period - 10
+ATR Mult - 0.9
+
+1. NQ 5m
+ATR Period - 14
+ATR Mult - 0.9
+
+
+
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © melihtuna
+//@version=5
+strategy('Chandelier Exit - Strategy IHAR', shorttitle='CE-STG IHAR', overlay=true, default_qty_value=1, initial_capital=10000, currency=currency.USD)
+
+length = input(title='ATR Period', defval=12)
+mult = input.float(title='ATR Multiplier', step=0.1, defval=0.9)
+showLabels = input(title='Show Buy/Sell Labels ?', defval=false)
+useClose = input(title='Use Close Price for Extremums ?', defval=true)
+highlightState = input(title='Highlight State ?', defval=true)
+
+atr = mult * ta.atr(length)
+
+longStop = (useClose ? ta.highest(close, length) : ta.highest(length)) - atr
+longStopPrev = nz(longStop[1], longStop)
+longStop := close[1] > longStopPrev ? math.max(longStop, longStopPrev) : longStop
+
+shortStop = (useClose ? ta.lowest(close, length) : ta.lowest(length)) + atr
+shortStopPrev = nz(shortStop[1], shortStop)
+shortStop := close[1] < shortStopPrev ? math.min(shortStop, shortStopPrev) : shortStop
+
+var int dir = 1
+dir := close > shortStopPrev ? 1 : close < longStopPrev ? -1 : dir
+
+var color longColor = color.green
+var color shortColor = color.red
+
+longStopPlot = plot(dir == 1 ? longStop : na, title='Long Stop', style=plot.style_linebr, linewidth=2, color=color.new(longColor, 0))
+buySignal = dir == 1 and dir[1] == -1
+plotshape(buySignal ? longStop : na, title='Long Stop Start', location=location.absolute, style=shape.circle, size=size.tiny, color=color.new(longColor, 0))
+plotshape(buySignal and showLabels ? longStop : na, title='Buy Label', text='Buy', location=location.absolute, style=shape.labelup, size=size.tiny, color=color.new(longColor, 0), textcolor=color.new(color.white, 0))
+
+shortStopPlot = plot(dir == 1 ? na : shortStop, title='Short Stop', style=plot.style_linebr, linewidth=2, color=color.new(shortColor, 0))
+sellSignal = dir == -1 and dir[1] == 1
+plotshape(sellSignal ? shortStop : na, title='Short Stop Start', location=location.absolute, style=shape.circle, size=size.tiny, color=color.new(shortColor, 0))
+plotshape(sellSignal and showLabels ? shortStop : na, title='Sell Label', text='Sell', location=location.absolute, style=shape.labeldown, size=size.tiny, color=color.new(shortColor, 0), textcolor=color.new(color.white, 0))
+
+midPricePlot = plot(ohlc4, title='', style=plot.style_circles, linewidth=0, display=display.none, editable=false)
+
+longFillColor = highlightState ? dir == 1 ? longColor : na : na
+shortFillColor = highlightState ? dir == -1 ? shortColor : na : na
+fill(midPricePlot, longStopPlot, title='Long State Filling', color=longFillColor, transp=90)
+fill(midPricePlot, shortStopPlot, title='Short State Filling', color=shortFillColor, transp=90)
+
+
+long_short = input.bool(true, 'Long-Short', group='Strategy Settings')
+
+start = input.time(timestamp('2022-01-01'), 'Date', group='Strategy Settings')
+finish = input.time(timestamp('2025-01-01'), 'Date', group='Strategy Settings')
+window() =>
+    time >= start and time <= finish ? true : false
+
+// slRatio=input(5, "Manuel Stop Loss Ratio", type=input.float, minval=0, group="Strategy Settings")
+// tpRatio=input(20, "Take Profit Ratio", type=input.float, minval=0, group="Strategy Settings")
+// tsStartRatio=input(10, "Trailing Stop Start Ratio", type=input.float, minval=0, group="Strategy Settings")
+// tsRatio=input(5, "Trailing Stop Ratio", type=input.float, minval=1, group="Strategy Settings")
+
+// lastBuyPrice = strategy.position_avg_price
+
+// diffHiPriceRatio = (high-lastBuyPrice)/lastBuyPrice*100
+// diffLoPriceRatio = (close-lastBuyPrice)/lastBuyPrice*100
+// posHiRatio=0.0
+// posHiRatio:= strategy.position_size > 0 ? diffHiPriceRatio > posHiRatio[1] ? diffHiPriceRatio : posHiRatio[1] : 0
+
+// s_diffHiPriceRatio = (low-lastBuyPrice)/lastBuyPrice*100
+// s_diffLoPriceRatio = (close-lastBuyPrice)/lastBuyPrice*100
+// s_posHiRatio=0.0
+// s_posHiRatio:= strategy.position_size < 0 ? s_diffLoPriceRatio < s_posHiRatio[1] ? s_diffLoPriceRatio : s_posHiRatio[1] : 0
+
+// functions
+IsLong() =>
+    strategy.position_size > 0
+
+IsShort() =>
+    strategy.position_size < 0
+
+InSession(sessionTimes) =>
+    not na(time(timeframe.period, sessionTimes))
+
+// ALLOWED TRADE HOURS
+
+// Get user input
+session = input.session(title='Time session', defval='2330-1600', group='Allowed Trade Time Settings')
+
+// Skip US news 30m? (1h before the NY market open)
+// also close all trades before 15m
+news_session = input.session(title='News Time session (NOT ALLOWED TO TRADE)', defval='0715-0745', group='Allowed Trade Time Settings')
+
+// Check if the current bar falls within our session
+isInSession = InSession(session)
+isInTradeNewsSession = InSession(news_session)
+
+isTradeAllowed = isInSession and not isInTradeNewsSession
+
+bgcolor(isTradeAllowed ? color.new(#cda66d, 80) : na, transp=90)
+
+licenseID = input.string(title='Pinescript License ID', defval='6388198605013', group='Pinescript Alert Settings')
+inputSymbol = input.string(title='Symbol for close alert', defval='EURUSD', group='Pinescript Alert Settings')
+StopLoss = input.int(5, 'Stop Loss (points)', minval=0, group='Pinescript Alert Settings')
+TakeProfit = input.int(15, 'Take Profit (points)', minval=0, group='Pinescript Alert Settings')
+Volume = input.float(0.4, 'Volume (lots size)', minval=0.0, step=0.1, group='Pinescript Alert Settings')
+
+if isTradeAllowed
+    // 6388198605013,{{strategy.order.action}},EURUSD,sl=12,tp=40,risk=0.17
+    if window() and buySignal
+        alert(licenseID + ',buy,' + inputSymbol + ',sl=' + str.tostring(StopLoss) + ',tp=' + str.tostring(TakeProfit) + ',risk=' + str.tostring(Volume))
+        strategy.entry('buy', strategy.long)
+    if long_short and window() and sellSignal
+        alert(licenseID + ',sell,' + inputSymbol + ',sl=' + str.tostring(StopLoss) + ',tp=' + str.tostring(TakeProfit) + ',risk=' + str.tostring(Volume))
+        strategy.entry('sell', strategy.short)
+else
+    // 6388198605013,closelong,EURUSD
+    alert(licenseID + ',closelong,' + inputSymbol)
+    alert(licenseID + ',closeshort,' + inputSymbol)
+    strategy.close_all()
+
+
+
+
+
+
