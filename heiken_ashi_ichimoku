@@ -1,0 +1,156 @@
+1) NAS 5m
+4 12 7 5
+SL=40, TP=110, volume=0.4
+
+2) EURUSD 5m
+5 12 6 6
+SL=13, TP=45, volume=0.15
+
+
+
+
+
+
+
+
+
+
+//@version=5
+
+strategy('Heiken Ashi + Ichimoku Kinko Hyo Strategy IHAR', shorttitle='HaI IHAR', overlay=true, max_bars_back=1000, default_qty_value=1, calc_on_order_fills=true, pyramiding=0)
+
+hahigh = request.security(ticker.heikinashi(syminfo.tickerid), timeframe.period, high)
+halow = request.security(ticker.heikinashi(syminfo.tickerid), timeframe.period, low)
+
+TenkanSenPeriods = input.int(9, minval=1, title='Tenkan Sen Periods')
+KijunSenPeriods = input.int(24, minval=1, title='Kijun Sen Periods')
+SenkouSpanBPeriods = input.int(51, minval=1, title='Senkou Span B Periods')
+displacement = input.int(24, minval=1, title='Displacement')
+donchian(len) =>
+    math.avg(ta.lowest(len), ta.highest(len))
+TenkanSen = donchian(TenkanSenPeriods)
+KijunSen = donchian(KijunSenPeriods)
+SenkouSpanA = math.avg(TenkanSen, KijunSen)
+SenkouSpanB = donchian(SenkouSpanBPeriods)
+SenkouSpanH = math.max(SenkouSpanA[displacement - 1], SenkouSpanB[displacement - 1])
+SenkouSpanL = math.min(SenkouSpanA[displacement - 1], SenkouSpanB[displacement - 1])
+ChikouSpan = close[displacement - 1]
+
+// plot(TenkanSen, color=color.new(color.blue, 0), title='Tenkan Sen', linewidth=2)
+// plot(KijunSen, color=color.new(color.maroon, 0), title='Kijun Sen', linewidth=3)
+// plot(close, offset=-displacement, color=color.new(color.orange, 0), title='Chikou Span', linewidth=2)
+sa = plot(SenkouSpanA, offset=displacement, color=color.new(color.green, 0), title='Senkou Span A', linewidth=2)
+sb = plot(SenkouSpanB, offset=displacement, color=color.new(color.red, 0), title='Senkou Span B', linewidth=3)
+fill(sa, sb, color=SenkouSpanA > SenkouSpanB ? color.rgb(76, 175, 79, 86) : color.rgb(255, 82, 82, 85))
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+// functions
+IsLong() =>
+    strategy.position_size > 0
+
+IsShort() =>
+    strategy.position_size < 0
+
+InSession(sessionTimes) =>
+    not na(time(timeframe.period, sessionTimes))
+
+// ALLOWED TRADE HOURS
+
+// Get user input
+session = input.session(title="Time session", defval="2330-1600", group="Allowed Trade Time Settings")
+
+// Skip US news 30m? (1h before the NY market open)
+// also close all trades before 15m
+news_session = input.session(title="News Time session (NOT ALLOWED TO TRADE)", defval="0715-0745", group="Allowed Trade Time Settings")
+
+// Check if the current bar falls within our session
+isInSession = InSession(session)
+isInTradeNewsSession = InSession(news_session)
+
+isTradeAllowed = isInSession and not isInTradeNewsSession
+
+bgcolor(isTradeAllowed ? color.new(#cda66d, 80) : na)
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+start     = input.time(timestamp("2022-08-01"), "Date", group="Strategy Settings")
+finish    = input.time(timestamp("2025-01-01"), "Date", group="Strategy Settings")   
+window()  => time >= start and time <= finish ? true : false
+
+licenseID = input.string(title="Pinescript License ID", defval="6388198605013", group="Pinescript Alert Settings")
+inputSymbol = input.string(title="Symbol for close alert", defval="EURUSD", group="Pinescript Alert Settings")
+Volume=input.float(0.4, "Volume (lots size)", minval=0.0, step = 0.1, group="Pinescript Alert Settings")
+StopLoss=input.float(5, "Stop Loss (points)", minval=0, step = 1, group="Pinescript Alert Settings")
+TakeProfit=input.float(15, "Take Profit (points)", minval=0, step = 1, group="Pinescript Alert Settings")
+ShowSLTP=input.bool(false, "Show SL TP lines on chart", group="Pinescript Alert Settings")
+
+// if isTradeAllowed
+//     // 6388198605013,{{strategy.order.action}},EURUSD,sl=12,tp=40,risk=0.17
+//     if window() and buySignal
+//         alert(licenseID + ",buy," + inputSymbol + ",sl=" + tostring(StopLoss) + ",tp=" + tostring(TakeProfit) + ",risk=" + tostring(Volume))
+//         strategy.entry("buy", strategy.long)
+//     if long_short and window() and sellSignal
+//         alert(licenseID + ",sell," + inputSymbol + ",sl=" + tostring(StopLoss) + ",tp=" + tostring(TakeProfit) + ",risk=" + tostring(Volume))
+//         strategy.entry("sell", strategy.short)
+// else
+//     // 6388198605013,closelong,EURUSD
+//     alert(licenseID + ",closelong," + inputSymbol)
+//     alert(licenseID + ",closeshort," + inputSymbol)
+//     strategy.close_all()
+
+
+////
+
+TPLong = strategy.position_avg_price + TakeProfit
+SLLong = strategy.position_avg_price - StopLoss
+
+TPShort = strategy.position_avg_price - TakeProfit
+SLShort = strategy.position_avg_price + StopLoss
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+longCondition = hahigh > math.max(hahigh[1], hahigh[2]) and close > ChikouSpan and close > SenkouSpanH and (TenkanSen >= KijunSen or close > KijunSen)
+if longCondition and window() and isTradeAllowed and not IsLong()
+    alert(licenseID + ",buy," + inputSymbol + ",sl=" + str.tostring(StopLoss) + ",tp=" + str.tostring(TakeProfit) + ",risk=" + str.tostring(Volume))
+    strategy.entry('Long', strategy.long)
+
+shortCondition = halow < math.min(halow[1], halow[2]) and close < ChikouSpan and close < SenkouSpanL and (TenkanSen <= KijunSen or close < KijunSen)
+if shortCondition and window() and isTradeAllowed and not IsShort()
+    alert(licenseID + ",sell," + inputSymbol + ",sl=" + str.tostring(StopLoss) + ",tp=" + str.tostring(TakeProfit) + ",risk=" + str.tostring(Volume))
+    strategy.entry('Short', strategy.short)
+
+closelong = halow < math.min(halow[1], halow[2]) and (TenkanSen < KijunSen or close < SenkouSpanA or close < KijunSen or close < SenkouSpanH or close < ChikouSpan)
+if IsLong() and closelong and window()
+    alert(licenseID + ",closelong," + inputSymbol)
+    strategy.close('Long')
+
+closeshort = hahigh > math.max(hahigh[1], hahigh[2]) and (TenkanSen > KijunSen or close > SenkouSpanA or close > KijunSen or close > SenkouSpanL or close > ChikouSpan)
+if IsShort() and closeshort and window()
+    alert(licenseID + ",closeshort," + inputSymbol)
+    strategy.close('Short')
+
+if (IsLong() or IsShort()) and not isTradeAllowed
+    alert(licenseID + ",closelong," + inputSymbol)
+    alert(licenseID + ",closeshort," + inputSymbol)
+    strategy.close_all()
+
+// if IsLong() // SL for 'long' trades
+//     strategy.exit("Long", limit = TPLong, stop = SLLong)
+// if IsShort() // SL for 'short' trades
+//     strategy.exit("Short", limit = TPShort, stop = SLShort)
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// Plot take profit values for confirmation (for 'long' trades)
+plot(series=(IsLong() and ShowSLTP) ? TPLong : na, color=color.green, style=plot.style_linebr, linewidth=2, title="Long TP")
+plot(series=(IsLong() and ShowSLTP) ? SLLong : na, color=color.red,   style=plot.style_linebr, linewidth=2, title="Long SL")
+
+// Plot take profit values for confirmation (for 'short' trades)
+plot(series=(IsShort() and ShowSLTP) ? TPShort : na, color=color.green,   style=plot.style_linebr, linewidth=2, title="Short TP")
+plot(series=(IsShort() and ShowSLTP) ? SLShort : na, color=color.red,     style=plot.style_linebr, linewidth=2, title="Short SL")
