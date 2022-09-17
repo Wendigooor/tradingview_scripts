@@ -1,0 +1,22 @@
+//@version=3 
+study("SMA Imbalance Oscillator", precision=5) 
+
+smaLength = input(defval=20, title="SMA Length:") 
+src = input(defval=hlc3, type=source, title="SMA source:") 
+sma = sma(src, smaLength) 
+
+pricePoint = iff(low > sma, high, iff(high < sma, low, iff(high - sma > sma - low, high, low))) 
+difference = abs(pricePoint - sma) 
+
+differenceTotal = 0.00000 
+differenceTotal := nz(differenceTotal[1]) + difference 
+
+totalCount = 0 
+totalCount := nz(totalCount[1]) + 1 
+
+avgDistance = differenceTotal / totalCount 
+Imbalance = difference - avgDistance
+
+plot(Imbalance, style=columns, color=iff(Imbalance > avgDistance * 2, #B22222, iff(Imbalance > avgDistance, #FF8C00, iff(Imbalance > 0, #EEE8AA, #B0E0E6))), transp=0, editable=false) 
+
+hline(0, linestyle=line, color=gray, editable=false) 
