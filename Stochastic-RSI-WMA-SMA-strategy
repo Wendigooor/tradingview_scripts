@@ -1,0 +1,168 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// @wendigooor
+//
+// all credits to @bufirolas
+// original idea - https://www.tradingview.com/script/n1M9HghZ-Stochastic-RSI-WMA-SMA-strat/
+
+// "an entry signal it's a cross down or up on
+// the stochastics. if you're in a downtrend
+// on the hourly time frame you
+// must also be in a downtrend on the five
+// minute so the five period has to be below the 144
+// as long as the five period is still trading below
+// the 144 (or any other) period on both the hourly and the five minutes
+// we are looking for these short signals crosses down
+// in the overbought region of the stochastic. Viceversa for longs"
+
+//@version=5
+strategy('Stoch + WMA + SMA strat IHAR', overlay=true, pyramiding=0, default_qty_value=1, initial_capital=10000, currency=currency.USD, calc_on_order_fills=true)
+
+//Default settings in one place
+var int defaultStochOS = 30
+var int defaultStochOB = 65
+var int defaultLengthRSI = 13
+var int defaultLengthStochRSI = 15
+var int defaultSmoothK = 3
+var int defaultSmoothD = 3
+var int defaultRsiOS = 20
+var int defaultRsiOB = 80
+var int defaultLengthWMA = 330
+var int defaultLengthSMA = 5
+var string defaultMainSession = '2330-2330'
+var string defaultRestrictSession = '0715-1045'
+var int defaultStopLossPoints = 24
+var int defaultTargetProfitPoints = 50
+var bool defaultUsePercentagesForTPandSL = false
+var float defaultStopLossPercentage = 0.35
+var float defaultTargetProfitPercentage = 0.7
+var bool defaultUseSLandTP = true
+var bool defaultUseAllowedTimeToTrade = false
+
+//Strategy Inputs
+src4 = input(close, title='RSI Source')
+stochOS = input.int(defval=defaultStochOS, step=5, title='Stochastics Oversold Level')
+stochOB = input.int(defval=defaultStochOB, step=5, title='Stochastics Overbought Level')
+
+//Stoch rsi Calculations
+smoothK = input.int(defaultSmoothK, minval=1)
+smoothD = input.int(defaultSmoothD, minval=1)
+lengthRSI = input.int(defaultLengthRSI, minval=1)
+lengthStoch = input.int(defaultLengthStochRSI, minval=1)
+rsi1 = ta.rsi(src4, lengthRSI)
+k = ta.sma(ta.stoch(rsi1, rsi1, rsi1, lengthStoch), smoothK)
+d = ta.sma(k, smoothD)
+h0 = hline(defaultRsiOB, linestyle=hline.style_dotted)
+h1 = hline(defaultRsiOS, linestyle=hline.style_dotted)
+
+//MA
+wmaLength = input(defval=defaultLengthWMA, title='WMA Length')
+smaLength = input(defval=defaultLengthSMA, title='SMA Length')
+WMA = request.security(syminfo.tickerid, '60', ta.wma(close, wmaLength))
+SMA = request.security(syminfo.tickerid, '60', ta.sma(close, smaLength))
+minWMA = ta.wma(close, wmaLength)
+minSMA = ta.sma(close, smaLength)
+
+//Entry Logic
+stochBuy = ta.crossover(k, d) and k < stochOS and barstate.isconfirmed
+stochSell = ta.crossunder(k, d) and k > stochOB and barstate.isconfirmed
+maBuy = minSMA > minWMA and barstate.isconfirmed
+daymaBuy = SMA > WMA and barstate.isconfirmed
+
+// backtest logic
+start = input.time(timestamp('2022-01-01'), 'From', group='Backtest Strategy Settings')
+finish = input.time(timestamp('2025-01-01'), 'To', group='Backtest Strategy Settings')
+testPeriod() =>
+    time >= start and time <= finish ? true : false
+
+// allowed time to trade
+
+// Get user input
+useAllowedTimeToTrade = input.bool(defaultUseAllowedTimeToTrade, title='Trade only in specific session', group='Allowed Trade Time Settings')
+mainSession = input.session(title='Time session (main)', defval=defaultMainSession, group='Allowed Trade Time Settings')
+
+// Skip US news 30m? (1h before the NY market open), will close all trades with the first timebar in this newsSession
+restrictSession = input.session(title='News Time session (Restrtict trade)', defval=defaultRestrictSession, group='Allowed Trade Time Settings')
+
+inSession(sessionTimes) =>
+    not na(time(timeframe.period, sessionTimes))
+
+// Check if the current bar falls within our session
+isInMainSession = useAllowedTimeToTrade ? inSession(mainSession) : true
+isInTraderestrictSession = useAllowedTimeToTrade ? inSession(restrictSession) : false
+
+//SL & TP Calculations
+useSLandTP = input.bool(defaultUseSLandTP, title='Use SL & TP', group='SL/TP Settings')
+stopLossPoints = input.float(defaultStopLossPoints, 'Stop Loss (points)', minval=0, group='SL/TP Settings')
+takeProfitPoints = input.float(defaultTargetProfitPoints, 'Take Profit (points)', minval=0, group='SL/TP Settings')
+
+usePercentagesForTPandSL = input.bool(defaultUsePercentagesForTPandSL, title='Use Percentages for SL & TP', group='SL/TP Settings')
+stopLossPercentage = input.float(defaultStopLossPercentage, 'Stop Loss (%)', minval=0, step=0.1, group='SL/TP Settings')
+takeProfitPercentage = input.float(defaultTargetProfitPercentage, 'Take Profit (%)', minval=0, step=0.1, group='SL/TP Settings')
+
+calculatedTakeProfit = usePercentagesForTPandSL ? (strategy.position_avg_price * takeProfitPercentage / 100) : takeProfitPoints
+calculatedStopLoss = usePercentagesForTPandSL ? (strategy.position_avg_price * stopLossPercentage / 100) : stopLossPoints
+
+longTP = strategy.position_avg_price + calculatedTakeProfit
+longSL = strategy.position_avg_price - calculatedStopLoss
+
+shortTP = strategy.position_avg_price - calculatedTakeProfit
+shortSL = strategy.position_avg_price + calculatedStopLoss
+
+isLong() => strategy.position_size > 0
+isShort() => strategy.position_size < 0
+
+//Stop Selector
+SL = isLong() ? longSL : (isShort() ? shortSL : na)
+TP = isLong() ? longTP : (isShort() ? shortTP : na)
+
+//long/short + time conditions for entries
+isLongInCondition = stochBuy and maBuy and daymaBuy and not isLong()
+isShortInCondition = stochSell and not maBuy and not daymaBuy and not isShort()
+
+isTradeAllowedNow = testPeriod() and isInMainSession and not isInTraderestrictSession
+
+longEntrySignal = isLongInCondition and isTradeAllowedNow
+shortEntrySignal = isShortInCondition and isTradeAllowedNow
+
+//Entries
+if longEntrySignal
+    strategy.entry('long', direction=strategy.long)
+if shortEntrySignal
+    strategy.entry('short', direction=strategy.short)
+
+//Exit
+if useSLandTP
+    strategy.exit('longexit', 'long', stop=SL, limit=TP)
+    strategy.exit('shortexit', 'short', stop=SL, limit=TP)
+
+//Force Exit if trades are not allowed now
+if (isLong() or isShort()) and not isTradeAllowedNow
+    strategy.close_all()
+
+//Plots
+plot(useSLandTP ? SL : na, color=color.new(color.red, 0), style=plot.style_cross)
+plot(useSLandTP ? TP : na, color=color.new(color.green, 0), style=plot.style_cross)
+plot(minWMA)
+plot(minSMA, color=color.new(color.green, 0))
+
+//color trade session time (useful if you have any time restrictions)
+bgcolor(isTradeAllowedNow ? color.new(#cda66d, 80) : na)
+
+//plot long/short signals
+plotshape(
+	 longEntrySignal ? true : na,
+	 title="Long Entry",
+	 style=shape.labelup,
+	 location=location.belowbar,
+	 color=color.green,
+	 size=size.small
+     )
+
+plotshape(
+	 shortEntrySignal ? true : na,
+	 title="Short Entry",
+	 style=shape.labeldown,
+	 location=location.abovebar,
+	 color=color.red,
+	 size=size.small
+     )
