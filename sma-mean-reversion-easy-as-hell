@@ -1,3 +1,13 @@
+https://www.tradingview.com/script/FsxCDGWG-SMA-Imbalance-Oscillator/
+
+This oscillator is used for *mean reversion* strategies only.
+
+This oscillator calculates the real-time distance of a price-point subtracted from the SMA , then compares it to the average distance to determine equilibrium imbalances. When the imbalance becomes less and goes under the signal line, a reversal is very likely.
+
+Do not trade mean reversion during any news events.
+
+
+
 //@version=3 
 study("SMA Imbalance Oscillator", precision=5) 
 
