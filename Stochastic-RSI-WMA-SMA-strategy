@@ -18,8 +18,8 @@
 strategy('Stoch + WMA + SMA strat IHAR', overlay=true, pyramiding=0, default_qty_value=1, initial_capital=10000, currency=currency.USD, calc_on_order_fills=true)
 
 //Default settings in one place
-var int defaultStochOS = 30
-var int defaultStochOB = 65
+var int defaultStochOS = 15
+var int defaultStochOB = 50
 var int defaultLengthRSI = 13
 var int defaultLengthStochRSI = 15
 var int defaultSmoothK = 3
@@ -28,7 +28,7 @@ var int defaultRsiOS = 20
 var int defaultRsiOB = 80
 var int defaultLengthWMA = 330
 var int defaultLengthSMA = 5
-var string defaultMainSession = '2330-2330'
+var string defaultMainSession = '1615-1545' // '2330-2330'
 var string defaultRestrictSession = '0715-1045'
 var int defaultStopLossPoints = 24
 var int defaultTargetProfitPoints = 50
@@ -37,6 +37,8 @@ var float defaultStopLossPercentage = 0.35
 var float defaultTargetProfitPercentage = 0.7
 var bool defaultUseSLandTP = true
 var bool defaultUseAllowedTimeToTrade = false
+var bool defaultUseMAToFilterLongEntries = true
+var bool defaultUseMAToFilterShortEntries = true
 
 //Strategy Inputs
 src4 = input(close, title='RSI Source')
@@ -61,6 +63,10 @@ WMA = request.security(syminfo.tickerid, '60', ta.wma(close, wmaLength))
 SMA = request.security(syminfo.tickerid, '60', ta.sma(close, smaLength))
 minWMA = ta.wma(close, wmaLength)
 minSMA = ta.sma(close, smaLength)
+
+//Use MA to filter long/short entries
+useMAToFilterLongEntries = input.bool(defaultUseMAToFilterLongEntries, title='Longs', group='Filter Entries Settings (with MA)', inline = 'Filter entries')
+useMAToFilterShortEntries = input.bool(defaultUseMAToFilterShortEntries, title=' Shorts', group='Filter Entries Settings (with MA)', inline = 'Filter entries')
 
 //Entry Logic
 stochBuy = ta.crossover(k, d) and k < stochOS and barstate.isconfirmed
@@ -116,8 +122,12 @@ SL = isLong() ? longSL : (isShort() ? shortSL : na)
 TP = isLong() ? longTP : (isShort() ? shortTP : na)
 
 //long/short + time conditions for entries
-isLongInCondition = stochBuy and maBuy and daymaBuy and not isLong()
-isShortInCondition = stochSell and not maBuy and not daymaBuy and not isShort()
+
+maLongCondition = useMAToFilterLongEntries ? (maBuy and daymaBuy) : true
+maShortCondition = useMAToFilterShortEntries ? (not maBuy and not daymaBuy) : true
+
+isLongInCondition = stochBuy and maLongCondition and not isLong()
+isShortInCondition = stochSell and maShortCondition and not isShort()
 
 isTradeAllowedNow = testPeriod() and isInMainSession and not isInTraderestrictSession
 
@@ -132,8 +142,10 @@ if shortEntrySignal
 
 //Exit
 if useSLandTP
-    strategy.exit('longexit', 'long', stop=SL, limit=TP)
-    strategy.exit('shortexit', 'short', stop=SL, limit=TP)
+	if isLong()
+    	strategy.exit('longexit', 'long', stop=SL, limit=TP)
+	if isShort()
+    	strategy.exit('shortexit', 'short', stop=SL, limit=TP)
 
 //Force Exit if trades are not allowed now
 if (isLong() or isShort()) and not isTradeAllowedNow
