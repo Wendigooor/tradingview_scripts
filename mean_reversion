@@ -9,13 +9,45 @@
 // the opposite hypothesis is rejected).
 
 //@version=5
-indicator('Augmented Dickey–Fuller (ADF) mean reversion test', shorttitle='ADF', overlay=false, max_bars_back=5000, max_lines_count=500)
+strategy('Augmented Dickey–Fuller (ADF) mean reversion test', shorttitle='ADF IHAR', overlay=false, pyramiding=0, default_qty_value=1, initial_capital=10000, currency=currency.USD, calc_on_order_fills=true)
+
+// Default values
+var float defaultThreshold = 0.2
+var int defaultLengthRSI = 14
+var int defaultRsiOverSold = 30
+var int defaultRsiOverBought = 70
+var int defaultStopLossPoints = 24
+var int defaultTargetProfitPoints = 50
+var bool defaultUsePercentagesForTPandSL = false
+var float defaultStopLossPercentage = 0.35
+var float defaultTargetProfitPercentage = 0.7
+var bool defaultUseSLandTP = true
+var string defaultMainSession = '1615-1545' // '2330-2330'
+var string defaultRestrictSession = '0715-1045'
+var bool defaultUseAllowedTimeToTrade = false
+var int lastBarIndexWithSignal = 0
 
 src       = input.source(title='Source',            defval=close)
 lookback  = input.int(title='Length',               defval=100, minval = 2, tooltip = 'The test is applied in a moving window. Length defines the number of points in the sample.')
 nLag      = input.int(title='Maximum lag',          defval=0,   minval = 0, tooltip = 'Maximum lag which is included in test. Generally, lags allow taking into account serial correlation of price changes.')
 conf      = input.string(title='Confidence Level',  defval="90%", options = ['90%', '95%', '99%'], tooltip = 'Defines at which confidence level the critical value of the ADF test statistic is calculated. If the test statistic is below the critical value, the time series sample is concluded to be mean-reverting.')
-isInfobox = input.bool(title='Show infobox',        defval=true)
+isInfobox = input.bool(title='Show infobox',        defval=false)
+
+threshold = input.float(title='Threshold (reverse signal level, -1..1)', defval=defaultThreshold, minval=-0.5, step=0.05)
+
+//Strategy Inputs
+rsiSrc = input(close, title='RSI Source', group='Strategy Settings', inline = 'Filter entries')
+
+rsiOverSold = input.int(defaultRsiOverSold, title='RSI OS level', minval=0, step=5, group='Strategy Settings', inline = 'Filter entries')
+rsiOverBought = input.int(defaultRsiOverBought, title='RSI OB level', minval=0, step=5, group='Strategy Settings', inline = 'Filter entries')
+rsiLength = input.int(defaultLengthRSI, minval=1, group='Strategy Settings', inline = 'Filter entries')
+rsiValue = ta.rsi(rsiSrc, rsiLength)
+
+// backtest logic
+start = input.time(timestamp('2022-01-01'), 'From', group='Backtest Strategy Settings')
+finish = input.time(timestamp('2025-01-01'), 'To', group='Backtest Strategy Settings')
+testPeriod() =>
+    time >= start and time <= finish ? true : false
 
 // --- functions ---
 // To-do: transfer some linear algebra to a separate library, or use public libraries
@@ -240,10 +272,140 @@ color    tauColor =  switch
     tauADF < crit => #7AF54D
     tauADF > crit => color.from_gradient(math.abs(tauADF), 0.0, math.abs(crit), color.white, #F5DF4D)//#939597, #F5DF4D)
 
-bgcolor(#64416b)
-plot(0.0,    color = #939597,   title = "Zero")
-plot(crit,   color = #c84df5,   title = "Critical value")
+// bgcolor(#64416b)
+plot(0.0,    color = #044281,   title = "Zero")
+plot(crit,   color = #d3a6e3,   title = "Critical value")
 plot(tauADF, color = tauColor,  title = "Test statistic",     style = plot.style_cross, linewidth = 2)
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+//allowed time to trade
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// Get user input
+useAllowedTimeToTrade = input.bool(defaultUseAllowedTimeToTrade, title='Trade only in specific session', group='Allowed Trade Time Settings')
+mainSession = input.session(title='Time session (main)', defval=defaultMainSession, group='Allowed Trade Time Settings')
+
+// Skip US news 30m? (1h before the NY market open), will close all trades with the first timebar in this newsSession
+restrictSession = input.session(title='News Time session (Restrtict trade)', defval=defaultRestrictSession, group='Allowed Trade Time Settings')
+
+inSession(sessionTimes) =>
+    not na(time(timeframe.period, sessionTimes))
+
+// Check if the current bar falls within our session
+isInMainSession = useAllowedTimeToTrade ? inSession(mainSession) : true
+isInTraderestrictSession = useAllowedTimeToTrade ? inSession(restrictSession) : false
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+//SL & TP Calculations
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+
+useSLandTP = input.bool(defaultUseSLandTP, title='Use SL & TP', group='SL/TP Settings')
+stopLossPoints = input.float(defaultStopLossPoints, 'Stop Loss (points)', minval=0, group='SL/TP Settings')
+takeProfitPoints = input.float(defaultTargetProfitPoints, 'Take Profit (points)', minval=0, group='SL/TP Settings')
+
+usePercentagesForTPandSL = input.bool(defaultUsePercentagesForTPandSL, title='Use Percentages for SL & TP', group='SL/TP Settings')
+stopLossPercentage = input.float(defaultStopLossPercentage, 'Stop Loss (%)', minval=0, step=0.1, group='SL/TP Settings')
+takeProfitPercentage = input.float(defaultTargetProfitPercentage, 'Take Profit (%)', minval=0, step=0.1, group='SL/TP Settings')
+
+calculatedTakeProfit = usePercentagesForTPandSL ? (strategy.position_avg_price * takeProfitPercentage / 100) : takeProfitPoints
+calculatedStopLoss = usePercentagesForTPandSL ? (strategy.position_avg_price * stopLossPercentage / 100) : stopLossPoints
+
+longTP = strategy.position_avg_price + calculatedTakeProfit
+longSL = strategy.position_avg_price - calculatedStopLoss
+
+shortTP = strategy.position_avg_price - calculatedTakeProfit
+shortSL = strategy.position_avg_price + calculatedStopLoss
+
+isLong() => strategy.position_size > 0
+isShort() => strategy.position_size < 0
+
+//Stop Selector
+SL = isLong() ? longSL : (isShort() ? shortSL : na)
+TP = isLong() ? longTP : (isShort() ? shortTP : na)
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////// tauADF is the signal level
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+isSignalInThreshold = tauADF >= threshold and barstate.isconfirmed
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+//Entry Logic
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+
+isSignalWasDoneNotInLastBar = true
+
+isOverSold = rsiValue < rsiOverSold
+isOverBought = rsiValue > rsiOverBought
+
+isLongInCondition = isSignalInThreshold and isOverSold
+isShortInCondition = isSignalInThreshold and isOverBought
+
+longConditionColor = color.new(color.green, 20)
+shortConditionColor = color.new(color.red, 20)
+
+currentSignalBarColor = if isLongInCondition or isShortInCondition
+    isLongInCondition ? longConditionColor : shortConditionColor
+else
+    color.navy
+
+bgcolor(isSignalInThreshold ? currentSignalBarColor : color.new(#cda66d, 30))
+
+/////// 
+//preventing drawdowns
+
+//1)
+//store previous bar status (is bar provide some sort of signal)
+//and do not make a one new entry unless we in 'trend', on prolonged sitatuation of signals that will be closed by Stoploss
+isSignalWasPreviousBar = tauADF[1] >= threshold and barstate.isconfirmed
+
+//2)
+// BarsSinceLastExit() returns the number of bars since the last,
+// most recent exit in the strategy's. Returns
+// 'na' when the strategy had no position.
+// barsSinceLastExit() =>
+//     ta.barssince(strategy.position_size == 0)
+// barSincePosOpen = ta.barssince(strategy.position_size == 0)
+
+lastTradeResult = ta.change(strategy.netprofit)
+barsSinceLastClosedTrade = ta.barssince(lastTradeResult < 0 or lastTradeResult > 0)
+
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+//strategy entries
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+
+isTradeAllowedNow = testPeriod() and isInMainSession and not isInTraderestrictSession
+
+isEnoughBarsSinceLastClosedTrade = if na(barsSinceLastClosedTrade)
+    true
+else
+    barsSinceLastClosedTrade > 10
+
+// and not isSignalWasPreviousBar 
+longEntrySignal = isLongInCondition and isTradeAllowedNow and isEnoughBarsSinceLastClosedTrade
+shortEntrySignal = isShortInCondition and isTradeAllowedNow and isEnoughBarsSinceLastClosedTrade
+
+//Entries
+if longEntrySignal
+    strategy.entry('long', direction=strategy.long)
+if shortEntrySignal
+    strategy.entry('short', direction=strategy.short)
+
+//Exit
+if useSLandTP
+	if isLong()
+    	strategy.exit('longexit', 'long', stop=SL, limit=TP)
+	if isShort()
+    	strategy.exit('shortexit', 'short', stop=SL, limit=TP)
+
+//Force Exit if trades are not allowed now
+if (isLong() or isShort()) and not isTradeAllowedNow
+    strategy.close_all()
+
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
 
@@ -252,6 +414,9 @@ if barstate.islast and isInfobox
     table.cell(infobox, 0, 0, text = "Test Statistic",   text_color = color.black, text_size = size.small)
     table.cell(infobox, 0, 1, text = conf+" Critical Value",    text_color = color.black, text_size = size.small)
     table.cell(infobox, 0, 2, text = "Mean Reverting?",   text_color = color.black, text_size = size.small)
-    table.cell(infobox, 1, 0, text = str.format("{0, number, #.####}",tauADF),   text_color = color.black, text_size = size.small)
-    table.cell(infobox, 1, 1, text = str.format("{0, number, #.####}",crit),     text_color = color.black, text_size = size.small)
-    table.cell(infobox, 1, 2, text = (tauADF < crit)?"Yes":"No",   text_color = color.black, text_size = size.small)
+    table.cell(infobox, 1, 0, text = str.tostring(barsSinceLastClosedTrade),   text_color = color.black, text_size = size.small)
+    table.cell(infobox, 1, 1, text = str.tostring(tauADF[2]),     text_color = color.black, text_size = size.small)
+    table.cell(infobox, 1, 2, text = str.tostring(tauADF[1]), text_color = color.black)
+    // table.cell(infobox, 1, 2, text = str.format("{0, number, #.####}",lastBarIndexWithSignal), text_color = color.black)
+// table.cell(infobox, 1, 2, text = (tauADF < crit)?"Yes":"No",   text_color = color.black, text_size = size.small)
+
