@@ -7,26 +7,53 @@ This oscillator calculates the real-time distance of a price-point subtracted fr
 Do not trade mean reversion during any news events.
 
 
+//@version=5
+indicator('SMA Imbalance Oscillator', precision=5)
 
-//@version=3 
-study("SMA Imbalance Oscillator", precision=5) 
+var int defaultLengthRSI = 24
+var int defaultRsiOverSold = 50
+var int defaultRsiOverBought = 50
+var int defamultSMALength = 55
+var float defaultImbalanceMultiplier = 2.0
+var int defaultImbalanceDetectionLevel = 50
 
-smaLength = input(defval=20, title="SMA Length:") 
-src = input(defval=hlc3, type=source, title="SMA source:") 
-sma = sma(src, smaLength) 
+imbalanceMultiplier = input.float(defval = defaultImbalanceMultiplier, step = 0.2, title = 'Imbalance Multiplier')
+imbalanceDetectionLevel = input.int(defval = defaultImbalanceDetectionLevel, step = 5, title = 'Imbalance Detection Level')
 
-pricePoint = iff(low > sma, high, iff(high < sma, low, iff(high - sma > sma - low, high, low))) 
-difference = abs(pricePoint - sma) 
+rsiSrc = input(close, title='RSI Source', group='Strategy Settings', inline = 'Filter entries')
+rsiOverSold = input.int(defaultRsiOverSold, title='RSI OS level', minval=0, step=5, group='Strategy Settings', inline = 'Filter entries')
+rsiOverBought = input.int(defaultRsiOverBought, title='RSI OB level', minval=0, step=5, group='Strategy Settings', inline = 'Filter entries')
+rsiLength = input.int(defaultLengthRSI, minval=1, group='Strategy Settings', inline = 'Filter entries')
+rsiValue = ta.rsi(rsiSrc, rsiLength)
 
-differenceTotal = 0.00000 
-differenceTotal := nz(differenceTotal[1]) + difference 
+smaLength = input(defval=defamultSMALength, title='SMA Length:')
+src = input(defval=hlc3, title='SMA source:')
+sma = ta.sma(src, smaLength)
 
-totalCount = 0 
-totalCount := nz(totalCount[1]) + 1 
+iff_1 = high - sma > sma - low ? high : low
+iff_2 = high < sma ? low : iff_1
+pricePoint = low > sma ? high : iff_2
+difference = math.abs(pricePoint - sma)
 
-avgDistance = differenceTotal / totalCount 
+differenceTotal = 0.00000
+differenceTotal := nz(differenceTotal[1]) + difference
+
+totalCount = 0
+totalCount := nz(totalCount[1]) + 1
+
+avgDistance = differenceTotal / totalCount
 Imbalance = difference - avgDistance
 
-plot(Imbalance, style=columns, color=iff(Imbalance > avgDistance * 2, #B22222, iff(Imbalance > avgDistance, #FF8C00, iff(Imbalance > 0, #EEE8AA, #B0E0E6))), transp=0, editable=false) 
+iff_3 = Imbalance > 0 ? color.new(#6ada48, 0) : color.new(#865fce, 0)
+iff_4 = Imbalance > avgDistance ? #c57513 : iff_3
+imbalanceColor = Imbalance > avgDistance * imbalanceMultiplier ? color.new(#461111, 0) : iff_4
+plot(Imbalance, style=plot.style_columns, color=imbalanceColor, editable=false)
 
-hline(0, linestyle=line, color=gray, editable=false) 
+
+///plot signals
+isOverSold = rsiValue < rsiOverSold
+isOverBought = rsiValue > rsiOverBought
+bgcolor(Imbalance > imbalanceDetectionLevel ? (isOverSold ? color.green : color.red) : na)
+
+hline(0, linestyle=hline.style_solid, color=color.gray, editable=false)
+
