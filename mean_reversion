@@ -12,10 +12,10 @@
 strategy('Augmented Dickey–Fuller (ADF) mean reversion test', shorttitle='ADF IHAR', overlay=false, pyramiding=0, default_qty_value=1, initial_capital=10000, currency=currency.USD, calc_on_order_fills=true)
 
 // Default values
-var float defaultThreshold = 0.2
-var int defaultLengthRSI = 14
-var int defaultRsiOverSold = 30
-var int defaultRsiOverBought = 70
+var float defaultThreshold = 0.0
+var int defaultLengthRSI = 24
+var int defaultRsiOverSold = 50
+var int defaultRsiOverBought = 50
 var int defaultStopLossPoints = 24
 var int defaultTargetProfitPoints = 50
 var bool defaultUsePercentagesForTPandSL = false
@@ -25,15 +25,15 @@ var bool defaultUseSLandTP = true
 var string defaultMainSession = '1615-1545' // '2330-2330'
 var string defaultRestrictSession = '0715-1045'
 var bool defaultUseAllowedTimeToTrade = false
-var int lastBarIndexWithSignal = 0
+var int defaultSkipNBarsSinceLastClosedTrade = 3
 
 src       = input.source(title='Source',            defval=close)
-lookback  = input.int(title='Length',               defval=100, minval = 2, tooltip = 'The test is applied in a moving window. Length defines the number of points in the sample.')
+lookback  = input.int(title='Length',               defval=120, minval = 2, tooltip = 'The test is applied in a moving window. Length defines the number of points in the sample.')
 nLag      = input.int(title='Maximum lag',          defval=0,   minval = 0, tooltip = 'Maximum lag which is included in test. Generally, lags allow taking into account serial correlation of price changes.')
 conf      = input.string(title='Confidence Level',  defval="90%", options = ['90%', '95%', '99%'], tooltip = 'Defines at which confidence level the critical value of the ADF test statistic is calculated. If the test statistic is below the critical value, the time series sample is concluded to be mean-reverting.')
 isInfobox = input.bool(title='Show infobox',        defval=false)
 
-threshold = input.float(title='Threshold (reverse signal level, -1..1)', defval=defaultThreshold, minval=-0.5, step=0.05)
+threshold = input.float(title='Threshold (reverse signal level, -1.5..inf)', defval=defaultThreshold, minval=-1.5, step=0.05)
 
 //Strategy Inputs
 rsiSrc = input(close, title='RSI Source', group='Strategy Settings', inline = 'Filter entries')
@@ -273,9 +273,9 @@ color    tauColor =  switch
     tauADF > crit => color.from_gradient(math.abs(tauADF), 0.0, math.abs(crit), color.white, #F5DF4D)//#939597, #F5DF4D)
 
 // bgcolor(#64416b)
-plot(0.0,    color = #044281,   title = "Zero")
-plot(crit,   color = #d3a6e3,   title = "Critical value")
-plot(tauADF, color = tauColor,  title = "Test statistic",     style = plot.style_cross, linewidth = 2)
+plot(threshold, color = #044281,   title = "Zero")
+plot(crit,      color = #570974,   title = "Critical value")
+plot(tauADF,    color = tauColor,  title = "Test statistic",     style = plot.style_line, linewidth = 2)
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 //allowed time to trade
@@ -327,6 +327,7 @@ TP = isLong() ? longTP : (isShort() ? shortTP : na)
 ////////////////////////// tauADF is the signal level
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 isSignalInThreshold = tauADF >= threshold and barstate.isconfirmed
+isTauADFCrossingThreshold = ta.crossunder(tauADF, threshold) and barstate.isconfirmed
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 //Entry Logic
@@ -359,16 +360,9 @@ bgcolor(isSignalInThreshold ? currentSignalBarColor : color.new(#cda66d, 30))
 isSignalWasPreviousBar = tauADF[1] >= threshold and barstate.isconfirmed
 
 //2)
-// BarsSinceLastExit() returns the number of bars since the last,
-// most recent exit in the strategy's. Returns
-// 'na' when the strategy had no position.
-// barsSinceLastExit() =>
-//     ta.barssince(strategy.position_size == 0)
-// barSincePosOpen = ta.barssince(strategy.position_size == 0)
-
+// barsSinceLastClosedTrade returns the number of bars since the last trade exit
 lastTradeResult = ta.change(strategy.netprofit)
 barsSinceLastClosedTrade = ta.barssince(lastTradeResult < 0 or lastTradeResult > 0)
-
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 //strategy entries
@@ -379,11 +373,11 @@ isTradeAllowedNow = testPeriod() and isInMainSession and not isInTraderestrictSe
 isEnoughBarsSinceLastClosedTrade = if na(barsSinceLastClosedTrade)
     true
 else
-    barsSinceLastClosedTrade > 10
+    barsSinceLastClosedTrade > defaultSkipNBarsSinceLastClosedTrade
 
 // and not isSignalWasPreviousBar 
-longEntrySignal = isLongInCondition and isTradeAllowedNow and isEnoughBarsSinceLastClosedTrade
-shortEntrySignal = isShortInCondition and isTradeAllowedNow and isEnoughBarsSinceLastClosedTrade
+longEntrySignal = isOverSold and isTauADFCrossingThreshold and isTradeAllowedNow and isEnoughBarsSinceLastClosedTrade
+shortEntrySignal = isOverBought and isTauADFCrossingThreshold and isTradeAllowedNow and isEnoughBarsSinceLastClosedTrade
 
 //Entries
 if longEntrySignal
@@ -402,6 +396,30 @@ if useSLandTP
 if (isLong() or isShort()) and not isTradeAllowedNow
     strategy.close_all()
 
+
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+//plot everything
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// //plot long/short signals
+// plotshape(
+// 	 longEntrySignal ? true : na,
+// 	 title="Long",
+// 	 style=shape.labelup,
+// 	 location=location.belowbar,
+// 	 color=color.green,
+// 	 size=size.small
+//      )
+
+// plotshape(
+// 	 shortEntrySignal ? true : na,
+// 	 title="Short",
+// 	 style=shape.labelup,
+// 	 location=location.belowbar,
+// 	 color=color.red,
+// 	 size=size.small
+//      )
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 
