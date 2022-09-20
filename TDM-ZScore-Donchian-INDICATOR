@@ -4,7 +4,7 @@ indicator(title='SUPERPUPER', shorttitle='super-puper', timeframe='')
 // -------- Inputs --------
 buyColor = input.color(color.new(#32CD32,0),inline='col', title='Buy')
 sellColor = input.color(color.new(#F44336,0),inline='col', title='Sell')
-neutalColor = input.color(color.new(#FFFFFF,0),inline='col', title='Neutral')
+neutralColor = input.color(color.new(#FFFFFF,0),inline='col', title='Neutral')
 strongSignalColor = input.color(color.black,inline='col', title='Strong')
 
 ////////////////////////////////////////////////////////////////////////////////////////////////
@@ -24,7 +24,10 @@ tdmBuySetup := close < close[4] ? tdmBuySetup[1] == 13 ? 1 : tdmBuySetup[1] + 1 
 tdmSellSetup = 0
 tdmSellSetup := close > close[4] ? tdmSellSetup[1] == 13 ? 1 : tdmSellSetup[1] + 1 : 0
 
-tdmBarColour = tdmBuySetup >= tdmThreshhold ? buyColor : tdmSellSetup >= tdmThreshhold ? sellColor : neutalColor
+tdmLongSignal = tdmBuySetup >= tdmThreshhold and barstate.isconfirmed
+tdmShortSignal = tdmSellSetup >= tdmThreshhold and barstate.isconfirmed
+
+tdmBarColour = tdmLongSignal ? buyColor : tdmShortSignal ? sellColor : neutralColor
 
 ////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////
@@ -56,13 +59,13 @@ zscoreMA = zscoreTypeMA == 'EMA' ? ta.ema(zscoreMean, zscoreLookbackPeriod) : zs
 // if zscoreShortSignal
 //     zscoreSignalColor := sellColor
 
-zscoreExtremeLong = zscoreMean > zscoreExtremeTresholdPos
-zscoreExtremeShort = zscoreMean < zscoreExtremeTresholdNeg
+zscoreExtremeOS = zscoreMean < zscoreExtremeTresholdNeg and barstate.isconfirmed
+zscoreExtremeOB = zscoreMean > zscoreExtremeTresholdPos and barstate.isconfirmed
 
-zscoreExtremeColor = neutalColor
-if zscoreExtremeLong
+zscoreExtremeColor = neutralColor
+if zscoreExtremeOB
     zscoreExtremeColor := sellColor
-if zscoreExtremeShort
+if zscoreExtremeOS
     zscoreExtremeColor := buyColor
 
 ////////////////////////////////////////////////////////////////////////////////////////////////
@@ -80,7 +83,7 @@ donchianHighRatio = ((close-donchianLow) / (donchianHigh-donchianLow)) * 100
 donchianLowRatio = -((donchianHigh-close) / (donchianHigh-donchianLow)) * 100
 
 donchianSignal = (donchianHigh > donchianHigh[1]) or (donchianLow < donchianLow[1]) and barstate.isconfirmed
-donchianColor = donchianSignal ? strongSignalColor : neutalColor
+donchianColor = donchianSignal ? strongSignalColor : neutralColor
 
 ////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////
