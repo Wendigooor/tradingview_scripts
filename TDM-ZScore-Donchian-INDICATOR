@@ -1,0 +1,98 @@
+//@version=5
+indicator(title='SUPERPUPER', shorttitle='super-puper', timeframe='')
+
+// -------- Inputs --------
+buyColor = input.color(color.new(#32CD32,0),inline='col', title='Buy')
+sellColor = input.color(color.new(#F44336,0),inline='col', title='Sell')
+neutalColor = input.color(color.new(#FFFFFF,0),inline='col', title='Neutral')
+strongSignalColor = input.color(color.black,inline='col', title='Strong')
+
+////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////
+// Tom DeMark Sequential Heat Map - (TD 1-13 heatmap)
+// https://www.tradingview.com/script/Ly0EApWX-Tom-DeMark-Sequential-Heat-Map-TD-1-13-heatmap/
+////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////
+
+tdmThreshhold = input.int(10, title='Threshold level (1-13)', group='Tom DeMark Settings')
+
+// -------- Calculate bearish trend sequence --------
+tdmBuySetup = 0
+tdmBuySetup := close < close[4] ? tdmBuySetup[1] == 13 ? 1 : tdmBuySetup[1] + 1 : 0
+
+// -------- Calculate bullish trend sequence --------
+tdmSellSetup = 0
+tdmSellSetup := close > close[4] ? tdmSellSetup[1] == 13 ? 1 : tdmSellSetup[1] + 1 : 0
+
+tdmBarColour = tdmBuySetup >= tdmThreshhold ? buyColor : tdmSellSetup >= tdmThreshhold ? sellColor : neutalColor
+
+////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////
+// [Sidders]Std. Deviation from Mean/MA (Z-score)
+// https://www.tradingview.com/script/5Z5K1eVP-Sidders-Std-Deviation-from-Mean-MA-Z-score/
+////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////
+
+zscoreLookbackPeriod = input.int(90, title='Lookback period', group='Std Deviation from Mean MA Z-score Settings')
+zscoreSource = input.source(close, title='Data source', group='Std Deviation from Mean MA Z-score Settings')
+zscoreTypeMA = input.string('SMA', 'MA Type', options=['EMA', 'HMA', 'SMA', 'RMA', 'WMA'], group='Std Deviation from Mean MA Z-score Settings')
+
+zscoreExtremeTresholdPos = input.float(3, title='Define extreme Std. Dev. threshold', step=0.1, group='Std Deviation from Mean MA Z-score Settings')
+zscoreExtremeTresholdNeg = -zscoreExtremeTresholdPos
+
+//Z SCORE - MEAN
+zscoreBasisCalc = ta.sma(zscoreSource, zscoreLookbackPeriod)
+zscoreMean = (zscoreSource - zscoreBasisCalc) / ta.stdev(zscoreSource, zscoreLookbackPeriod)
+
+//Z SCORE - MOVING AVERAGE
+zscoreMA = zscoreTypeMA == 'EMA' ? ta.ema(zscoreMean, zscoreLookbackPeriod) : zscoreTypeMA == 'SMA' ? ta.sma(zscoreMean, zscoreLookbackPeriod) : zscoreTypeMA == 'RMA' ? ta.rma(zscoreMean, zscoreLookbackPeriod) : zscoreTypeMA == 'HMA' ? ta.hma(zscoreMean, zscoreLookbackPeriod) : ta.wma(zscoreMean, zscoreLookbackPeriod)
+
+// zscoreLongSignal = ta.crossover(zscoreMean, zscoreExtremeTresholdNeg) and barstate.isconfirmed
+// zscoreShortSignal = ta.crossunder(zscoreMean, zscoreExtremeTresholdPos) and barstate.isconfirmed
+
+// zscoreSignalColor = neutalColor
+// if zscoreLongSignal
+//     zscoreSignalColor := buyColor
+// if zscoreShortSignal
+//     zscoreSignalColor := sellColor
+
+zscoreExtremeLong = zscoreMean > zscoreExtremeTresholdPos
+zscoreExtremeShort = zscoreMean < zscoreExtremeTresholdNeg
+
+zscoreExtremeColor = neutalColor
+if zscoreExtremeLong
+    zscoreExtremeColor := sellColor
+if zscoreExtremeShort
+    zscoreExtremeColor := buyColor
+
+////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////
+// Donchian Oscillator
+// https://www.tradingview.com/script/2Z4lcoVw-Donchian-Oscillator/
+////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////
+
+donchianLookBack = input(defval=100, title="Donchian look-back:", group='Donchian Settings')
+donchianHigh = ta.highest(high, donchianLookBack) 
+donchianLow = ta.lowest(low, donchianLookBack) 
+
+donchianHighRatio = ((close-donchianLow) / (donchianHigh-donchianLow)) * 100
+donchianLowRatio = -((donchianHigh-close) / (donchianHigh-donchianLow)) * 100
+
+donchianSignal = (donchianHigh > donchianHigh[1]) or (donchianLow < donchianLow[1]) and barstate.isconfirmed
+donchianColor = donchianSignal ? strongSignalColor : neutalColor
+
+////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////
+// Draw all of them
+////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////
+
+st1_label = 'Tom DeMark'
+st2_label = 'STD Z-Score'
+st3_label = 'Donchian'
+st1_bar = 3, st2_bar = 2, st3_bar = 1
+
+plot(st1_bar, title=st1_label, color=tdmBarColour, style=plot.style_area)
+plot(st2_bar, title=st2_label, color=zscoreExtremeColor, style=plot.style_area)
+plot(st3_bar, title=st3_label, color=donchianColor, style=plot.style_area)
