@@ -24,8 +24,8 @@ tdmBuySetup := close < close[4] ? tdmBuySetup[1] == 13 ? 1 : tdmBuySetup[1] + 1 
 tdmSellSetup = 0
 tdmSellSetup := close > close[4] ? tdmSellSetup[1] == 13 ? 1 : tdmSellSetup[1] + 1 : 0
 
-tdmLongSignal = tdmBuySetup >= tdmThreshhold and barstate.isconfirmed
-tdmShortSignal = tdmSellSetup >= tdmThreshhold and barstate.isconfirmed
+tdmLongSignal = tdmBuySetup >= tdmThreshhold
+tdmShortSignal = tdmSellSetup >= tdmThreshhold
 
 tdmBarColour = tdmLongSignal ? buyColor : tdmShortSignal ? sellColor : neutralColor
 
@@ -59,8 +59,8 @@ zscoreMA = zscoreTypeMA == 'EMA' ? ta.ema(zscoreMean, zscoreLookbackPeriod) : zs
 // if zscoreShortSignal
 //     zscoreSignalColor := sellColor
 
-zscoreExtremeOS = zscoreMean < zscoreExtremeTresholdNeg and barstate.isconfirmed
-zscoreExtremeOB = zscoreMean > zscoreExtremeTresholdPos and barstate.isconfirmed
+zscoreExtremeOS = zscoreMean < zscoreExtremeTresholdNeg
+zscoreExtremeOB = zscoreMean > zscoreExtremeTresholdPos
 
 zscoreExtremeColor = neutralColor
 if zscoreExtremeOB
@@ -82,7 +82,7 @@ donchianLow = ta.lowest(low, donchianLookBack)
 donchianHighRatio = ((close-donchianLow) / (donchianHigh-donchianLow)) * 100
 donchianLowRatio = -((donchianHigh-close) / (donchianHigh-donchianLow)) * 100
 
-donchianSignal = (donchianHigh > donchianHigh[1]) or (donchianLow < donchianLow[1]) and barstate.isconfirmed
+donchianSignal = (donchianHigh > donchianHigh[1]) or (donchianLow < donchianLow[1])
 donchianColor = donchianSignal ? strongSignalColor : neutralColor
 
 ////////////////////////////////////////////////////////////////////////////////////////////////
