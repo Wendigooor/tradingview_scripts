@@ -1,0 +1,90 @@
+//@version=5
+strategy(title='SUPERPUPER STRATEGY', shorttitle='super-puper STRATEGY', default_qty_value=1, initial_capital=10000, currency=currency.USD, calc_on_order_fills=true)
+
+// -------- Inputs --------
+buyColor = input.color(color.new(#39a839, 0),inline='col', title='Buy')
+sellColor = input.color(color.new(#de544b, 0),inline='col', title='Sell')
+plotArrows = input.bool(true, inline='col', title='Draw Arrows')
+plotLines = input.bool(true, inline='col', title='Draw H-Lines')
+
+////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////
+// Tom DeMark Sequential Heat Map - (TD 1-13 heatmap)
+// https://www.tradingview.com/script/Ly0EApWX-Tom-DeMark-Sequential-Heat-Map-TD-1-13-heatmap/
+////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////
+
+tdmThreshhold = input.int(10, title='Threshold level (1-13)', group='Tom DeMark Settings')
+
+// -------- Calculate bearish trend sequence --------
+tdmBuySetup = 0
+tdmBuySetup := close < close[4] ? tdmBuySetup[1] == 13 ? 1 : tdmBuySetup[1] + 1 : 0
+
+// -------- Calculate bullish trend sequence --------
+tdmSellSetup = 0
+tdmSellSetup := close > close[4] ? tdmSellSetup[1] == 13 ? 1 : tdmSellSetup[1] + 1 : 0
+
+tdmLongSignal = tdmBuySetup >= tdmThreshhold and barstate.isconfirmed
+tdmShortSignal = tdmSellSetup >= tdmThreshhold and barstate.isconfirmed
+
+////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////
+// [Sidders]Std. Deviation from Mean/MA (Z-score)
+// https://www.tradingview.com/script/5Z5K1eVP-Sidders-Std-Deviation-from-Mean-MA-Z-score/
+////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////
+
+zscoreLookbackPeriod = input.int(90, title='Lookback period', group='Std Deviation from Mean MA Z-score Settings')
+zscoreSource = input.source(close, title='Data source', group='Std Deviation from Mean MA Z-score Settings')
+zscoreTypeMA = input.string('SMA', 'MA Type', options=['EMA', 'HMA', 'SMA', 'RMA', 'WMA'], group='Std Deviation from Mean MA Z-score Settings')
+
+zscoreExtremeTresholdPos = input.float(3, title='Define extreme Std. Dev. threshold', step=0.1, group='Std Deviation from Mean MA Z-score Settings')
+zscoreExtremeTresholdNeg = -zscoreExtremeTresholdPos
+
+//Z SCORE - MEAN
+zscoreBasisCalc = ta.sma(zscoreSource, zscoreLookbackPeriod)
+zscoreMean = (zscoreSource - zscoreBasisCalc) / ta.stdev(zscoreSource, zscoreLookbackPeriod)
+
+//Z SCORE - MOVING AVERAGE
+zscoreMA = zscoreTypeMA == 'EMA' ? ta.ema(zscoreMean, zscoreLookbackPeriod) : zscoreTypeMA == 'SMA' ? ta.sma(zscoreMean, zscoreLookbackPeriod) : zscoreTypeMA == 'RMA' ? ta.rma(zscoreMean, zscoreLookbackPeriod) : zscoreTypeMA == 'HMA' ? ta.hma(zscoreMean, zscoreLookbackPeriod) : ta.wma(zscoreMean, zscoreLookbackPeriod)
+
+zscoreExtremeOS = zscoreMean < zscoreExtremeTresholdNeg and barstate.isconfirmed
+zscoreExtremeOB = zscoreMean > zscoreExtremeTresholdPos and barstate.isconfirmed
+
+////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////
+// Donchian Oscillator
+// https://www.tradingview.com/script/2Z4lcoVw-Donchian-Oscillator/
+////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////
+
+donchianLookBack = input(defval=100, title="Donchian look-back:", group='Donchian Settings')
+donchianHigh = ta.highest(high, donchianLookBack) 
+donchianLow = ta.lowest(low, donchianLookBack) 
+
+donchianHighRatio = ((close-donchianLow) / (donchianHigh-donchianLow)) * 100
+donchianLowRatio = -((donchianHigh-close) / (donchianHigh-donchianLow)) * 100
+
+donchianSignal = (donchianHigh > donchianHigh[1]) or (donchianLow < donchianLow[1]) and barstate.isconfirmed
+
+////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////
+// Draw signals
+////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////
+
+// we need at least one of the signals (deMark/Zscore) + Donchian as confirmation that that was a strong enough signal
+
+sumLongSignal = (tdmLongSignal or zscoreExtremeOS) and donchianSignal
+sumShortSignal = (tdmShortSignal or zscoreExtremeOB) and donchianSignal
+
+color currentBgColor = na
+if sumLongSignal
+    currentBgColor := buyColor
+if sumShortSignal
+    currentBgColor := sellColor
+
+bgcolor(plotLines ? currentBgColor : na)
+
+plotshape(sumLongSignal and plotArrows, style=shape.triangleup, location=location.belowbar, color=buyColor, size = size.tiny)
+plotshape(sumShortSignal and plotArrows, style=shape.triangledown, location=location.abovebar, color=sellColor, size = size.tiny)
