@@ -1,0 +1,238 @@
+//@version=5
+strategy('Mean Reversion Oscillator Strategy IHAR', shorttitle='MROS', default_qty_value=1, initial_capital=10000, currency=currency.USD, calc_on_order_fills=true)
+
+var int defaultLengthRSI = 24
+var int defaultRsiOverSold = 50
+var int defaultRsiOverBought = 50
+var int defamultSMALength = 55
+
+var float defaultImbalanceMultiplier = 2.0
+var int defaultImbalanceDetectionLevel = 50
+
+var string defaultMainSession = '1615-1545' // '2330-2330'
+var string defaultRestrictSession = '0715-1045'
+var bool defaultUseAllowedTimeToTrade = false
+
+var int defaultStopLossPoints = 24
+var int defaultTargetProfitPoints = 50
+var bool defaultUsePercentagesForTPandSL = false
+var float defaultStopLossPercentage = 0.35
+var float defaultTargetProfitPercentage = 0.7
+var float defaultTralingLongStopLossPercentage = 0.2
+var float defaultTralingShortStopLossPercentage = 0.2
+var bool defaultUseTrailingStops = true
+var int defaultMaxLosingStreak = 3
+
+imbalanceMultiplier = input.float(defval = defaultImbalanceMultiplier, step = 0.2, title = 'Imbalance Multiplier')
+imbalanceDetectionLevel = input.int(defval = defaultImbalanceDetectionLevel, step = 5, title = 'Imbalance Detection Level', group='IMPORTANT')
+smaLength = input.int(defval=defamultSMALength, title='SMA Length:', group='IMPORTANT')
+src = input(defval=hlc3, title='SMA source:', group='IMPORTANT')
+
+rsiSrc = input(close, title='RSI Source', group='Strategy Settings', inline = 'Filter entries')
+rsiOverSold = input.int(defaultRsiOverSold, title='RSI OS level', minval=0, step=5, group='Strategy Settings', inline = 'Filter entries')
+rsiOverBought = input.int(defaultRsiOverBought, title='RSI OB level', minval=0, step=5, group='Strategy Settings', inline = 'Filter entries')
+rsiLength = input.int(defaultLengthRSI, minval=1, group='Strategy Settings', inline = 'Filter entries')
+rsiValue = ta.rsi(rsiSrc, rsiLength)
+
+sma = ta.sma(src, smaLength)
+
+iff_1 = high - sma > sma - low ? high : low
+iff_2 = high < sma ? low : iff_1
+pricePoint = low > sma ? high : iff_2
+difference = math.abs(pricePoint - sma)
+
+differenceTotal = 0.00000
+differenceTotal := nz(differenceTotal[1]) + difference
+
+totalCount = 0
+totalCount := nz(totalCount[1]) + 1
+
+avgDistance = differenceTotal / totalCount
+Imbalance = difference - avgDistance
+
+iff_3 = Imbalance > 0 ? color.new(#6ada48, 0) : color.new(#865fce, 0)
+iff_4 = Imbalance > avgDistance ? #c57513 : iff_3
+imbalanceColor = Imbalance > avgDistance * imbalanceMultiplier ? color.new(#461111, 0) : iff_4
+plot(Imbalance, style=plot.style_line, color=imbalanceColor, editable=false, linewidth=2)
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+///plot signals
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+isOverSold = rsiValue < rsiOverSold
+isOverBought = rsiValue > rsiOverBought
+isSignalInThreshold = Imbalance > imbalanceDetectionLevel
+bgcolor(isSignalInThreshold ? (isOverSold ? color.green : color.red) : na)
+
+hline(0, linestyle=hline.style_solid, color=color.gray, editable=false, linewidth=2)
+hline(imbalanceDetectionLevel, linestyle=hline.style_solid, color=color.rgb(187, 25, 199), editable=false, linewidth=2)
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+//backtest logic
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+start = input.time(timestamp('2022-01-01'), 'From', group='Backtest Strategy Settings')
+finish = input.time(timestamp('2025-01-01'), 'To', group='Backtest Strategy Settings')
+testPeriod() =>
+    time >= start and time <= finish ? true : false
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+//allowed time to trade
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+// Get user input
+useAllowedTimeToTrade = input.bool(defaultUseAllowedTimeToTrade, title='Trade only in specific session', group='Allowed Trade Time Settings')
+mainSession = input.session(title='Time session (main)', defval=defaultMainSession, group='Allowed Trade Time Settings')
+
+// Skip US news 30m? (1h before the NY market open), will close all trades with the first timebar in this newsSession
+restrictSession = input.session(title='News Time session (Restrtict trade)', defval=defaultRestrictSession, group='Allowed Trade Time Settings')
+
+inSession(sessionTimes) =>
+    not na(time(timeframe.period, sessionTimes))
+
+// Check if the current bar falls within our session
+isInMainSession = useAllowedTimeToTrade ? inSession(mainSession) : true
+isInTraderestrictSession = useAllowedTimeToTrade ? inSession(restrictSession) : false
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+//SL & TP Calculations
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+
+stopLossPoints = input.float(defaultStopLossPoints, 'Stop Loss (points)', minval=0, group='SL/TP Settings')
+takeProfitPoints = input.float(defaultTargetProfitPoints, 'Take Profit (points)', minval=0, group='SL/TP Settings')
+
+usePercentagesForTPandSL = input.bool(defaultUsePercentagesForTPandSL, title='Use Percentages for SL & TP', group='SL/TP Settings')
+stopLossPercentage = input.float(defaultStopLossPercentage, 'Stop Loss (%)', minval=0, step=0.1, group='SL/TP Settings')
+takeProfitPercentage = input.float(defaultTargetProfitPercentage, 'Take Profit (%)', minval=0, step=0.1, group='SL/TP Settings')
+
+calculatedTakeProfit = usePercentagesForTPandSL ? (strategy.position_avg_price * takeProfitPercentage / 100) : takeProfitPoints
+calculatedStopLoss = usePercentagesForTPandSL ? (strategy.position_avg_price * stopLossPercentage / 100) : stopLossPoints
+
+longTP = strategy.position_avg_price + calculatedTakeProfit
+longSL = strategy.position_avg_price - calculatedStopLoss
+
+shortTP = strategy.position_avg_price - calculatedTakeProfit
+shortSL = strategy.position_avg_price + calculatedStopLoss
+
+isLong() => strategy.position_size > 0
+isShort() => strategy.position_size < 0
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+//Trailing SL
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+
+useTrailingSL = input.bool(defaultUseTrailingStops, title='Use Trailing SL', group='Traling SL')
+// Configure trail stop level with input options (optional)
+longTrailPerc = input.float(title="Trail Long Loss (%)", minval=0.0, step=0.1, defval=defaultTralingLongStopLossPercentage, group='Traling SL') * 0.01
+shortTrailPerc = input.float(title="Trail Short Loss (%)", minval=0.0, step=0.1, defval=defaultTralingShortStopLossPercentage, group='Traling SL') * 0.01
+
+// Determine trail stop loss prices
+longTrailingStopPrice = 0.0
+
+longTrailingStopPrice := if isLong()
+    stopValue = close * (1 - longTrailPerc)
+    math.max(stopValue, longTrailingStopPrice[1])
+else
+    0
+
+// Determine trailing short price
+shortTrailingStopPrice = 0.0
+
+shortTrailingStopPrice := if (strategy.position_size < 0)
+    stopValue = close * (1 + shortTrailPerc)
+    math.min(stopValue, shortTrailingStopPrice[1])
+else
+    999999
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+//Stop Selector
+SL = isLong() ? longSL : (isShort() ? shortSL : na)
+TP = isLong() ? longTP : (isShort() ? shortTP : na)
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+//Prevent losing streak
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+// Set the max losing streak length with an input
+maxLosingStreak = input.int(title="Max Losing Streak Length (in one direction)", defval=defaultMaxLosingStreak, minval=1, group='IMPORTANT')
+
+// Check if there's a new losing trade that increased the streak
+newLoss = (strategy.losstrades > strategy.losstrades[1]) and
+     (strategy.wintrades == strategy.wintrades[1]) and
+     (strategy.eventrades == strategy.eventrades[1])
+
+// Determine current losing streak length
+streakLen = 0
+
+streakLen := if (newLoss)
+    nz(streakLen[1]) + 1
+else
+    if (strategy.wintrades > strategy.wintrades[1]) or
+         (strategy.eventrades > strategy.eventrades[1])
+        0
+    else
+        nz(streakLen[1])
+
+// See if losing streak is under max allowed
+notInLosingStreakYet = streakLen < maxLosingStreak
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+///entries
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+getLastPosSign() =>
+    strategy.closedtrades > 0 ? math.sign(strategy.closedtrades.size(strategy.closedtrades-1)) : na
+
+lastPos = getLastPosSign()
+lastPosWasLong = nz(lastPos) >= 0
+lastPosWasShort = nz(lastPos) <= 0
+
+isTradeAllowedNow = testPeriod() and isInMainSession and not isInTraderestrictSession
+
+if ta.change(isTradeAllowedNow)
+    streakLen := 0
+
+longsNotInLosingStreakYet = lastPosWasLong ? notInLosingStreakYet : true
+shortsNotInLosingStreakYet = lastPosWasShort ? notInLosingStreakYet : true
+
+longEntrySignal = isSignalInThreshold and isOverSold and isTradeAllowedNow and longsNotInLosingStreakYet and barstate.isconfirmed
+shortEntrySignal = isSignalInThreshold and isOverBought and isTradeAllowedNow and shortsNotInLosingStreakYet and barstate.isconfirmed
+
+if (strategy.position_size == 0 and strategy.closedtrades == strategy.closedtrades[1])
+    if longEntrySignal and not (isLong() or isShort())
+        // reload/clean losing streak since the trend is changed
+        if lastPosWasShort
+            streakLen := 0
+
+        strategy.entry('long', direction=strategy.long)
+    if shortEntrySignal and not (isLong() or isShort())
+        // reload/clean losing streak since the trend is changed
+        if lastPosWasLong
+            streakLen := 0
+
+        strategy.entry('short', direction=strategy.short)
+
+//Exit
+if isLong()
+    if useTrailingSL
+        strategy.exit('longexit TR', stop=longTrailingStopPrice)
+    else
+        strategy.exit('longexit', 'long', stop=SL, limit=TP)
+if isShort()
+    if useTrailingSL
+        strategy.exit('shortexit TR', stop=shortTrailingStopPrice)
+    else
+        strategy.exit('shortexit', 'short', stop=SL, limit=TP)
+
+//Force Exit if trades are not allowed now
+if (isLong() or isShort()) and not isTradeAllowedNow
+    streakLen := 0
+    strategy.close_all()
+
+
+//// Just for temporary debug
+infobox = table.new("bottom_left", 2, 3, bgcolor = #faedf5, frame_width = 1)
+table.cell(infobox, 0, 0, text = str.tostring(lastPosWasLong),   text_color = color.black, text_size = size.small)
+table.cell(infobox, 0, 1, text = str.tostring(lastPosWasShort),    text_color = color.black, text_size = size.small)
+table.cell(infobox, 0, 2, text = str.tostring(streakLen),    text_color = color.black, text_size = size.small)
