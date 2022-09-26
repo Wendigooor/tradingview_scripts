@@ -1,0 +1,136 @@
+https://www.tradingview.com/script/8r6oARMe-R-Trend-Exhaustion-upslidedown/
+
+// © upslidedown
+// One of the first indicators I ever used was %R, and I realized that with crypto strategies a period of 112 
+// provided very interesting results in trend following strategies. This indicator intends to mix standard %R
+// with the longer period %R and show key areas of interest. Using classic overbought/oversold logic, the 
+// indicator highlights a key trend and a subsequent break in that trend. When this condition is detected it 
+// will print a reversal arrow down. This is one of my odder ideas that appears to have some merit, so I'm 
+// publicly publishing for the community to find. If you find this useful please reach out and let me know.
+
+
+// Additional ideas in future... 
+// [ ] Convert this to a MACD based on %R style display showing difference, maybe?
+// [X] Highlight crosses and attempt to identify if bullish/bearish
+// [X] Allow for plotting of difference
+
+//@version=5
+version = "v1.2"
+indicator("%R Trend Exhaustion "+version+" [upslidedown]", format=format.price, precision=2, timeframe="", explicit_plot_zorder=true)
+
+// inputs
+settingsGroupName = "Settings ⌚"+ version
+src = input.source(close, "Source", group=settingsGroupName)
+threshold = input.int(20, title="Threshold", minval=1, group=settingsGroupName)
+smooth_type = input.string('ema', title="Smoothing Type", options=['ema', 'sma'], group=settingsGroupName)
+
+displayGroupName = "Display"
+plot_warning_triangle = input.bool(true, title="Plot OB/OS Warning Triangle (Light)", group=displayGroupName)
+plot_reversal_triangle = input.bool(true, title="Plot OB/OS Reversal Triangle (Dark)", group=displayGroupName)
+plot_shading = input.bool(true, title="Plot Shaded Color in OB/OS Zone", group=displayGroupName)
+plot_crosses = input.bool(true, title="Plot Crossover Dots", group=displayGroupName, tooltip="Experimental idea for plotting crossovers with attempted bull/bear coloring. This needs to be combined with other TA but typically crossover condition results in interesting price action during or after.")
+bullcol = input.color(#2466A7, title="Bullish Color", group=displayGroupName)
+bearcol = input.color(#CA0017, title="Bearish Color", group=displayGroupName)
+signal_loc_input = input.string("absolute", title="Triangle Icon Location", options=["absolute", "top&bottom"], group=displayGroupName, tooltip="Allow for absolute or fixed position of plotchar so that users can overlay just the OB/OS conditions on top of other indicators like a wavetrend.")
+bull_signal_loc = input.int(-107, title="Bull Signal Plot Location (if absolute)", group=displayGroupName)
+bear_signal_loc = input.int(5, title="Bear Signal Plot Location (if absolute)", group=displayGroupName)
+
+shortGroupName = "Fast Signal"
+shortLength = input.int(title="Fast Length", defval=21, group=shortGroupName)
+shortSmoothingLength = input.int(7, title="Smoothing Length", group=shortGroupName)
+shortcol = input.color(color.white, title="Fast Color", group=shortGroupName)
+
+longGroupName = "Slow Signal"
+longLength = input.int(112, title="Slow Length", minval=1, group=longGroupName)
+longSmoothingLength = input.int(3, title="Smoothing Length", group=longGroupName)
+longcol = input.color(#FFF58B, title="Slow Color", group=longGroupName)
+
+diffGroupName = "Difference (Experimental)"
+plot_difference = input.bool(false, "Plot Difference", group=diffGroupName, tooltip="I thought maybe this would show buying or selling phase... but in the end I don't think this is very useful data. It's interesting to look at though!")
+invert_difference = input.bool(false, "Invert Difference Calcuation", group=diffGroupName)
+diffcol = input.color(color.new(#BABABA, 75), title="Difference Fill Color", group=diffGroupName)
+ 
+// colors
+invisible = color.rgb(0, 0, 0, 100)
+bullcol_xlight = color.new(bullcol, 80)
+bearcol_xlight = color.new(bearcol, 80)
+bullcol_light = color.new(bullcol, 70)
+bearcol_light = color.new(bearcol, 70)
+bullcol_medium = color.new(bullcol, 60)
+bearcol_medium = color.new(bearcol, 60)
+
+// functions
+_pr(length) =>
+	max = ta.highest(length)
+	min = ta.lowest(length)
+	100 * (src - max) / (max - min)
+
+s_percentR = _pr(shortLength)
+l_percentR = _pr(longLength)
+
+if shortSmoothingLength > 1
+    if smooth_type == 'ema'
+        s_percentR := ta.ema(s_percentR, shortSmoothingLength)
+    else 
+        s_percentR := ta.sma(s_percentR, shortSmoothingLength)
+
+if longSmoothingLength > 1
+    if smooth_type == 'ema'
+        l_percentR := ta.ema(l_percentR, longSmoothingLength)
+    else 
+        l_percentR := ta.sma(l_percentR, longSmoothingLength)
+
+
+difference = invert_difference ? s_percentR-l_percentR : l_percentR-s_percentR
+difference := difference - 50
+
+
+// ob/os logic
+overbought = s_percentR >= -threshold and l_percentR >= -threshold
+oversold = s_percentR <= -100+threshold and l_percentR <= -100+threshold
+ob_reversal = not overbought and overbought[1]
+os_reversal = not oversold and oversold[1]
+ob_trend_start = overbought and not overbought[1]
+os_trend_start = oversold and not oversold[1]
+
+// detect crossovers for potential "in between" signals
+cross_bear = ta.crossover(l_percentR, s_percentR)
+cross_bull = ta.crossunder(l_percentR, s_percentR)
+
+
+// Print lines for stuff
+band1 = hline(-threshold, 'top', #2F4F4F, linestyle=hline.style_dotted)
+band0 = hline(-100+threshold, 'bottom', #2F4F4F, linestyle=hline.style_dotted)
+top = hline(0, 'upperLimit', #2F4F4F, linestyle=hline.style_solid)
+bottom = hline(-100, 'lowerLimit', #2F4F4F, linestyle=hline.style_solid)
+middle = hline(-50, 'lowerLimit', #2F4F4F, linestyle=hline.style_solid)
+
+fill(top, band1, overbought and plot_shading ? bearcol_xlight : invisible, 'overbought')
+fill(band0, bottom, oversold and plot_shading ? bullcol_xlight : invisible, 'oversold')
+
+
+// plot %R
+plot(s_percentR, "Fast Period %R", color=shortcol, linewidth=1)
+plot(l_percentR, "Slow Period %R", color=longcol, linewidth=1)
+
+plotshape(plot_reversal_triangle and ob_reversal ? bear_signal_loc : na, title="Overbought Trend Reversal", style=shape.triangledown, location=signal_loc_input == "absolute" ? location.absolute : location.top, color=bearcol, text='', textcolor=invisible, size=size.tiny)
+plotshape(plot_reversal_triangle and os_reversal ? bull_signal_loc : na, title="Oversold Trend Reversal", style=shape.triangleup, location=signal_loc_input == "absolute" ? location.absolute : location.bottom, color=bullcol, text='', textcolor=invisible, size=size.tiny)
+plotshape(plot_warning_triangle and overbought ? bear_signal_loc : na, title="Overbought Trend Warning", style=shape.triangleup, location=signal_loc_input == "absolute" ? location.absolute : location.top, color=bearcol_medium, text='', textcolor=invisible, size=size.tiny)
+plotshape(plot_warning_triangle and oversold ? bull_signal_loc : na, title="Oversold Trend Warning", style=shape.triangledown, location=signal_loc_input == "absolute" ? location.absolute : location.bottom, color=bullcol_medium, text='', textcolor=invisible, size=size.tiny)
+
+pivotcol = color.white
+plot(plot_crosses and (cross_bull or cross_bear) ? l_percentR : na, "Crossover Dot (small)", style=plot.style_circles, color=pivotcol, linewidth=4)
+plot(plot_crosses and (cross_bull or cross_bear) ? l_percentR : na, "Crossover Dot (big)", style=plot.style_circles, color=cross_bull ? bullcol_light : bearcol_light, linewidth=15)
+
+// Plot experimental difference idea
+diff_plot = plot(plot_difference ? difference : na, title="Difference", color=color.new(color.white,80), linewidth=1, style=plot.style_line)
+fill(diff_plot, plot(-50, color=invisible), title="Difference Fill", color=diffcol)
+
+
+// Alerts
+alertcondition(ob_reversal, "Arrow Down (Bearish Reversal)", message="Arrow Down: Overbought trend is exhausted")
+alertcondition(os_reversal, "Arrow Up (Bullish Reversal)", message="Arrow Up: Oversold trend is exhausted")
+alertcondition(ob_trend_start, "Overbought Trend Started", message="Warning: Possible overbought trend exhaustion")
+alertcondition(os_trend_start, "Oversold Trend Started", message="Warning: Possible oversold trend exhaustion")
+alertcondition(cross_bull, "Bullish Crossover", message="Potential bullish crossover printed")
+alertcondition(cross_bear, "Bearish Crossover", message="Potential bearish crossover printed")
