@@ -1,0 +1,75 @@
+//@version=5
+
+strategy(title='Strategy Hull Bollinger IHAR', shorttitle='Hull bollinger IHAR', overlay=true, calc_on_order_fills=false, default_qty_value=1)
+
+n = input(title='period', defval=3)
+
+
+n2ma = 2 * ta.wma(close, math.round(n / 2))
+nma = ta.wma(close, n)
+diff = n2ma - nma
+sqn = math.round(math.sqrt(n))
+
+
+n2ma1 = 2 * ta.wma(close[1], math.round(n / 2))
+nma1 = ta.wma(close[1], n)
+diff1 = n2ma1 - nma1
+sqn1 = math.round(math.sqrt(n))
+
+
+n1 = ta.wma(diff, sqn)
+n2 = ta.wma(diff1, sqn)
+c = n1 > n2 ? color.green : color.red
+
+i = input(1)
+PP = close[i]
+
+length1 = input.int(20, minval=1)
+src = input(close, title='Source')
+mult = input.float(2.0, minval=0.001, maxval=10, step=0.2)
+basis = ta.sma(src, length1)
+dev = mult * ta.stdev(src, length1)
+upper = basis + dev
+lower = basis - dev
+
+
+TP = input(500) * 10
+SL = input(500) * 10
+TS = input(20) * 10
+TO = input(10) * 10
+CQ = 100
+
+TPP = TP > 0 ? TP : na
+SLP = SL > 0 ? SL : na
+TSP = TS > 0 ? TS : na
+TOP = TO > 0 ? TO : na
+
+longCondition = ta.crossover(n1, lower) and barstate.isconfirmed
+shortCondition = ta.crossunder(n1, upper) and barstate.isconfirmed
+
+// functions
+IsLong() =>
+    strategy.position_size > 0
+
+IsShort() =>
+    strategy.position_size < 0
+
+
+licenseID = input.string(title='Pinescript License ID', defval='6388198605013', group='Pinescript Alert Settings')
+inputSymbol = input.string(title='Symbol for close alert', defval='EURUSD', group='Pinescript Alert Settings')
+StopLoss = input.int(50, 'Stop Loss (points)', minval=0, group='Pinescript Alert Settings')
+TakeProfit = input.int(120, 'Take Profit (points)', minval=0, group='Pinescript Alert Settings')
+Volume = input.float(0.2, 'Volume (lots size)', minval=0.0, step=0.1, group='Pinescript Alert Settings')
+
+convertPointsToRealPoints(number) =>
+    number / 4
+
+if longCondition
+    alert(licenseID + ',buy,' + inputSymbol + ',sl=' + str.tostring(convertPointsToRealPoints(StopLoss)) + ',tp=' + str.tostring(convertPointsToRealPoints(TakeProfit)) + ',risk=' + str.tostring(Volume))
+    strategy.entry('Long', strategy.long)
+if shortCondition
+    alert(licenseID + ',sell,' + inputSymbol + ',sl=' + str.tostring(convertPointsToRealPoints(StopLoss)) + ',tp=' + str.tostring(convertPointsToRealPoints(TakeProfit)) + ',risk=' + str.tostring(Volume))
+    strategy.entry('Short', strategy.short)
+
+strategy.exit('Close Short', 'Short', profit=TakeProfit, loss=StopLoss)
+strategy.exit('Close Long', 'Long', profit=TakeProfit, loss=StopLoss)
