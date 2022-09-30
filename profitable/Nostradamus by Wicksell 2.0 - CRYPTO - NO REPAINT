@@ -1,0 +1,464 @@
+//@version=5
+strategy('Nostradamus by Wicksell 2.0', overlay=true, default_qty_type=strategy.percent_of_equity, default_qty_value=100)
+
+// MACD + EMA 200 *** estratégia de compra e venda (RSI, EMA, SMA) *** Doji Harami *** sobrecompra e sobrevenda *** Direção de tendência *** Divergência *** Ichimoku
+
+
+// === Entradas gerais ===
+// Curto
+maFastSource = input(defval=open, title='Fast MA Source')
+maFastLength = input.int(defval=14, title='Fast MA Period', minval=1)
+// long ma
+maSlowSource = input(defval=open, title='Slow MA Source')
+maSlowLength = input.int(defval=21, title='Slow MA Period', minval=1)
+
+// === Entradas relacionado a estratégia ===
+tradeInvert = input(defval=false, title='Invert Trade Direction?')
+// Entrada de riscos
+inpTakeProfit = input.int(defval=100000000, title='Take Profit', minval=0)
+inpStopLoss = input.int(defval=5000, title='Stop Loss', minval=0)
+inpTrailStop = input.int(defval=1000, title='Trailing Stop Loss', minval=0)
+inpTrailOffset = input.int(defval=0, title='Trailing Stop Loss Offset', minval=0)
+
+// === Valores de gerenciamento de riscos ===
+// if an input is less than 1, assuming not wanted so we assign 'na' value to disable it.
+useTakeProfit = inpTakeProfit >= 1 ? inpTakeProfit : na
+useStopLoss = inpStopLoss >= 1 ? inpStopLoss : na
+useTrailStop = inpTrailStop >= 1 ? inpTrailStop : na
+useTrailOffset = inpTrailOffset >= 1 ? inpTrailOffset : na
+
+// === Configurações de série ===
+/// 
+maFast = ta.ema(maFastSource, maFastLength)
+maSlow = ta.ema(maSlowSource, maSlowLength)
+
+
+// === Lógica ===
+// is fast ma above slow ma?
+aboveBelow = maFast[1] >= maSlow[1] ? true : false
+// are we inverting our trade direction?
+tradeDirection = tradeInvert ? aboveBelow ? false : true : aboveBelow ? true : false
+
+
+
+
+// MACD + EMA 200
+
+
+
+// Input
+source = input(close)
+fastLength = input.int(12, minval=1, title='MACD fast moving average')
+slowLength = input.int(26, minval=1, title='MACD slow moving average')
+signalLength = input.int(9, minval=1, title='MACD signal line moving average')
+veryslowLength = input.int(200, minval=1, title='Very slow moving average')
+switch1 = input(true, title='Enable Bar Color?')
+switch2 = input(true, title='Enable Moving Averages?')
+switch3 = input(true, title='Enable Background Color?')
+
+// Calculation
+fastMA = ta.sma(source, fastLength)
+slowMA = ta.sma(source, slowLength)
+veryslowMA = ta.sma(source, veryslowLength)
+macd = fastMA - slowMA
+signal = ta.sma(macd, signalLength)
+hist = macd - signal
+
+// Colors
+MAtrendcolor = ta.change(veryslowMA) > 0 ? color.green : color.red
+change_1 = ta.change(veryslowMA)
+trendcolor = fastMA > slowMA and ta.change(veryslowMA) > 0 and close > slowMA ? color.green : fastMA < slowMA and change_1 < 0 and close < slowMA ? color.red : color.blue
+change_2 = ta.change(slowMA)
+bartrendcolor = close > fastMA and close > slowMA and close > veryslowMA and ta.change(slowMA) > 0 ? color.green : close < fastMA and close < slowMA and close < veryslowMA and change_2 < 0 ? color.red : color.blue
+crossunder_1 = ta.crossunder(hist, 0)
+backgroundcolor = slowMA > veryslowMA and ta.crossover(hist, 0) and macd > 0 and fastMA > slowMA and close[slowLength] > veryslowMA ? color.green : slowMA < veryslowMA and crossunder_1 and macd < 0 and fastMA < slowMA and close[slowLength] < veryslowMA ? color.red : na
+bgcolor(switch3 ? backgroundcolor : na, transp=80)
+barcolor(switch1 ? bartrendcolor : na)
+
+// Output
+F = plot(switch2 ? fastMA : na, color=trendcolor)
+W = plot(switch2 ? slowMA : na, color=trendcolor, linewidth=2)
+V = plot(switch2 ? veryslowMA : na, color=MAtrendcolor, linewidth=4)
+fill(F, V, color=color.new(color.gray, 90))
+
+
+// estratégia de compra e venda wicksell
+
+
+// Estratégia longo 
+longEntry() =>
+    ta.rsi(close, 2) <= 20 and close >= ta.sma(close, 200) and ta.ema(close, 20) and barstate.isconfirmed
+longExit() =>
+    ta.ema(close, 80) and ta.rsi(close, 2) >= 80 and barstate.isconfirmed
+
+
+strategy.entry(id='Compra', direction=strategy.long, when=longEntry())
+strategy.close(id='Compra', when=longExit())
+strategy.exit('Feche a ordem', from_entry='Venda', profit=useTakeProfit, loss=useStopLoss, trail_points=useTrailStop, trail_offset=useTrailOffset)
+
+// Estratégia curta
+shortEntry() =>
+    ta.rsi(close[1], 2) >= 80 and close[1] <= ta.sma(close[1], 200) and ta.ema(close[1], 80)
+shortExit() =>
+    low <= ta.ema(close[1], 20) and ta.rsi(close[1], 2) <= 10
+
+
+strategy.entry(id='Venda', direction=strategy.short, when=shortEntry())
+strategy.close(id='Venda', when=shortExit())
+strategy.exit('feche a ordem', from_entry='Compra', profit=useTakeProfit, loss=useStopLoss, trail_points=useTrailStop, trail_offset=useTrailOffset)
+
+
+
+
+// Sobrecompra e Sobrevenda
+
+
+
+backtime = input(title='Period', defval=5)
+overbought = input(title='RSI Overbought', defval=74)
+oversold = input(title='RSI Oversold', defval=24)
+
+calcSpread(k) =>
+    (high[k] - low[k]) / high[k] * 100
+
+isOversold(k) =>
+    key = k <= 1 ? 0 : k - 1
+    ta.rsi(close[k], backtime) <= oversold and volume[k] >= volume[key]
+
+isOverbought(k) =>
+    key = k <= 1 ? 0 : k - 1
+    ta.rsi(close[k], backtime) >= overbought and volume[k] >= volume[key]
+
+plotshape(isOverbought(1) and isOverbought(0), style=shape.labeldown, location=location.abovebar, color=color.new(#ff0000, 0))
+plotshape(isOversold(1) and isOversold(0), style=shape.labelup, location=location.belowbar, color=color.new(color.green, 0))
+
+
+// Bandas
+
+// Script created by JoinFree
+// BollingerBands added for reference
+// Buy Long when you see a Green colour bar 
+// Sell Short when you see a Red colour bar
+mysignal = ta.ema(close, 12) - ta.ema(close, 26)
+barcolor(mysignal[0] > mysignal[1] ? color.green : color.red)
+length = input.int(20, minval=1)
+mult = input.float(2.0, minval=0.001, maxval=50)
+basis = ta.sma(source, length)
+dev = mult * ta.stdev(source, length)
+upper = basis + dev
+lower = basis - dev
+p1 = plot(upper, color=color.new(color.white, 0))
+p2 = plot(lower, color=color.new(color.white, 0))
+fill(p1, p2, transp=90)
+
+
+
+// Padrão candle
+
+
+delta = close[1] - open[1]
+gap = open[1] - close[2]
+is_up = delta >= 0
+high_len = is_up ? high[1] - close[1] : high[1] - open[1]
+low_len = is_up ? open[1] - low[1] : close[1] - low[1]
+mod_delta = delta < 0 ? -delta : delta
+avg_mod = (mod_delta + mod_delta[1] + mod_delta[2] + mod_delta[3] + mod_delta[4] + mod_delta[5] + mod_delta[6] + mod_delta[7] + mod_delta[8] + mod_delta[9]) / 10
+
+// ENGULF
+is_bearish_engulf = -delta > delta[1] * 2 and delta[1] > 0 and delta < 0 and delta[2] > 0
+is_bullish_engulf = delta > -delta[1] * 2 and delta[1] < 0 and delta > 0 and delta[2] < 0
+plotshape(is_bearish_engulf, style=shape.triangledown, location=location.abovebar, color=color.new(color.white, 0), title='bearish_englf')
+plotshape(is_bearish_engulf, style=shape.triangledown, location=location.abovebar, color=color.new(color.white, 0), title='bearish_englf')
+plotshape(is_bullish_engulf, style=shape.triangleup, location=location.belowbar, color=color.new(color.yellow, 0), title='bullish_englf')
+
+// DOJI
+is_doji_up = delta * 10 < mod_delta and high - low > mod_delta * 10 and delta[1] < 0
+is_doji_down = delta * 10 < mod_delta and high - low > mod_delta * 10 and delta[1] > 0
+plotshape(is_doji_down, style=shape.triangledown, location=location.abovebar, color=color.new(color.white, 0), title='doji_down')
+plotshape(is_doji_down, style=shape.triangledown, location=location.abovebar, color=color.new(color.white, 0), title='doji_down')
+plotshape(is_doji_up, style=shape.triangleup, location=location.belowbar, color=color.new(color.yellow, 0), title='doji_up')
+
+// DOJI DRAGONFLY
+is_doji_dr_up = delta * 10 < mod_delta and low_len * 10 < mod_delta and high_len > mod_delta * 5 and delta[1] < 0
+is_doji_dr_down = delta * 10 < mod_delta and high_len * 10 < mod_delta and low_len > mod_delta * 5 and delta[1] > 0
+plotshape(is_doji_dr_down, style=shape.triangledown, location=location.abovebar, color=color.new(color.white, 0), title='doji_dr_down')
+plotshape(is_doji_dr_down, style=shape.triangledown, location=location.abovebar, color=color.new(color.white, 0), title='doji_dr_down')
+plotshape(is_doji_dr_up, style=shape.triangleup, location=location.belowbar, color=color.new(color.yellow, 0), title='doji_dr_up')
+
+// 3 SAME TICK
+same_up = delta > mod_delta * 2 and delta[1] > mod_delta[1] * 2 and delta[2] > mod_delta[2] * 2 and is_up
+same_down = delta * 2 < mod_delta and high - low > mod_delta * 10 and delta[1] > 0
+plotshape(same_down, style=shape.triangledown, location=location.abovebar, color=color.new(color.white, 0), title='3_same_down')
+plotshape(same_down, style=shape.triangledown, location=location.abovebar, color=color.new(color.white, 0), title='3_same_down')
+plotshape(same_up, style=shape.triangleup, location=location.belowbar, color=color.new(color.yellow, 0), title='3_same_up', offset=2)
+plotshape(same_up, style=shape.triangleup, location=location.belowbar, color=color.new(color.yellow, 0), title='3_same_up')
+plotshape(same_up, style=shape.triangleup, location=location.belowbar, color=color.new(color.yellow, 0), title='3_same_up', offset=1)
+
+// ichimoku
+
+turningPeriods = input.int(9, minval=1)
+standardPeriods = input.int(26, minval=1)
+leadingSpan2Periods = input.int(52, minval=1)
+displacement = input.int(26, minval=1)
+donchian(len) =>
+    math.avg(ta.lowest(len), ta.highest(len))
+turning = donchian(turningPeriods)
+standard = donchian(standardPeriods)
+leadingSpan1 = math.avg(turning, standard)
+leadingSpan2 = donchian(leadingSpan2Periods)
+
+plot(turning, title='Tenkan-Sen (9 Period)', linewidth=4, color=color.new(color.white, 0))
+plot(standard, title='Kinjun-Sen (26 Period)', linewidth=4, color=color.new(color.orange, 0))
+
+
+spanColor = leadingSpan1 >= leadingSpan2 ? color.lime : color.red
+
+p3 = plot(leadingSpan1, title='Senkou Span A (26 Period)', linewidth=4, offset=displacement, color=spanColor)
+p4 = plot(leadingSpan2, title='Senkou Span B (52 Period)', linewidth=4, offset=displacement, color=spanColor)
+
+fill(p3, p4, color=color.new(color.silver, 40), title='Kumo (Cloud)')
+
+
+
+
+// direção de tendência
+
+
+
+//izole dip - Isolated Bottom
+d02 = low
+d12 = low[1]
+izdip2 = low[2]
+d32 = low[3]
+d42 = low[4]
+h32 = high[3]
+h22 = high[2]
+
+//izole tepe - Isolated Peak
+t02 = high
+t12 = high[1]
+iztepe2 = high[2]
+t32 = high[3]
+t42 = high[4]
+L32 = low[3]
+L22 = low[2]
+
+
+
+izotepe1 = iztepe2 > t02 and iztepe2 >= t12 and iztepe2 > t32 and iztepe2 > t42 and low[1] > math.min(L32, L22) and low < math.min(L32, L22) ? -1 : na
+izotepe2 = t12 > t02 and t12 > iztepe2 and t12 > t32 and low < math.min(L22, low[1]) ? -2 : na
+
+izodip1 = izdip2 < d02 and izdip2 < d12 and izdip2 < d32 and izdip2 < d42 and high[1] < math.max(h32, h22) and high > math.max(h32, h22) ? 1 : na
+izodip2 = d12 < d02 and d12 < izdip2 and d12 < d32 and high > math.max(h22, high[1]) ? 1 : na
+
+
+plotarrow(izotepe1, colordown=color.new(color.white, 60), offset=-2)
+plotarrow(izotepe2, colordown=color.new(color.white, 60), offset=-1)
+plotarrow(izodip1, colorup=color.new(color.yellow, 40), offset=-2)
+plotarrow(izodip2, colorup=color.new(color.yellow, 40), offset=-1)
+
+
+
+
+// detector de divergência
+
+
+
+// @
+//Credit to https://www.tradingview.com/script/p3oqCa56-Pekipek-s-PPO-Divergence-BETA/ (I just changed the visuals and added alerts)
+
+
+topbots = input(false, title='Show PPO peak/trough triangles?')
+long_term_div = input(true, title='Use long term divergences?')
+div_lookback_period = input.int(55, minval=1, title='Lookback Period')
+fastLength1 = input.int(12, minval=1, title='PPO Fast')
+slowLength1 = input.int(26, minval=1, title='PPO Slow')
+signalLength1 = input.int(9, minval=1, title='PPO Signal')
+smoother = input.int(2, minval=1, title='PPO Smooth')
+fastMA1 = ta.ema(source, fastLength1)
+slowMA1 = ta.ema(source, slowLength1)
+macd3 = fastMA1 - slowMA1
+macd4 = macd3 / slowMA1 * 100
+d = ta.sma(macd4, smoother)  // smoothing PPO
+
+bullishPrice = low
+
+priceMins = bullishPrice > bullishPrice[1] and bullishPrice[1] < bullishPrice[2] or low[1] == low[2] and low[1] < low and low[1] < low[3] or low[1] == low[2] and low[1] == low[3] and low[1] < low and low[1] < low[4] or low[1] == low[2] and low[1] == low[3] and low[1] and low[1] == low[4] and low[1] < low and low[1] < low[5]  // this line identifies bottoms and plateaus in the price
+oscMins = d > d[1] and d[1] < d[2]  // this line identifies bottoms in the PPO
+
+BottomPointsInPPO = oscMins
+
+bearishPrice = high
+priceMax = bearishPrice < bearishPrice[1] and bearishPrice[1] > bearishPrice[2] or high[1] == high[2] and high[1] > high and high[1] > high[3] or high[1] == high[2] and high[1] == high[3] and high[1] > high and high[1] > high[4] or high[1] == high[2] and high[1] == high[3] and high[1] and high[1] == high[4] and high[1] > high and high[1] > high[5]  // this line identifies tops in the price
+oscMax = d < d[1] and d[1] > d[2]  // this line identifies tops in the PPO
+
+TopPointsInPPO = oscMax
+
+currenttrough4 = ta.valuewhen(oscMins, d[1], 0)  // identifies the value of PPO at the most recent BOTTOM in the PPO
+lasttrough4 = ta.valuewhen(oscMins, d[1], 1)  // NOT USED identifies the value of PPO at the second most recent BOTTOM in the PPO
+currenttrough5 = ta.valuewhen(oscMax, d[1], 0)  // identifies the value of PPO at the most recent TOP in the PPO
+lasttrough5 = ta.valuewhen(oscMax, d[1], 1)  // NOT USED identifies the value of PPO at the second most recent TOP in the PPO
+
+currenttrough6 = ta.valuewhen(priceMins, low[1], 0)  // this line identifies the low (price) at the most recent bottom in the Price
+lasttrough6 = ta.valuewhen(priceMins, low[1], 1)  // NOT USED this line identifies the low (price) at the second most recent bottom in the Price
+currenttrough7 = ta.valuewhen(priceMax, high[1], 0)  // this line identifies the high (price) at the most recent top in the Price
+lasttrough7 = ta.valuewhen(priceMax, high[1], 1)  // NOT USED this line identifies the high (price) at the second most recent top in the Price
+
+delayedlow = priceMins and ta.barssince(oscMins) < 3 ? low[1] : na
+delayedhigh = priceMax and ta.barssince(oscMax) < 3 ? high[1] : na
+
+// only take tops/bottoms in price when tops/bottoms are less than 5 bars away
+lowest_1 = ta.lowest(currenttrough6, 4)
+filter = ta.barssince(priceMins) < 5 ? lowest_1 : na
+highest_1 = ta.highest(currenttrough7, 4)
+filter2 = ta.barssince(priceMax) < 5 ? highest_1 : na
+
+//delayedbottom/top when oscillator bottom/top is earlier than price bottom/top
+y11 = ta.valuewhen(oscMins, delayedlow, 0)
+y12 = ta.valuewhen(oscMax, delayedhigh, 0)
+
+// only take tops/bottoms in price when tops/bottoms are less than 5 bars away, since 2nd most recent top/bottom in osc
+y2 = ta.valuewhen(oscMax, filter2, 1)  // identifies the highest high in the tops of price with 5 bar lookback period SINCE the SECOND most recent top in PPO
+y6 = ta.valuewhen(oscMins, filter, 1)  // identifies the lowest low in the bottoms of price with 5 bar lookback period SINCE the SECOND most recent bottom in PPO
+
+long_term_bull_filt = ta.valuewhen(priceMins, ta.lowest(div_lookback_period), 1)
+long_term_bear_filt = ta.valuewhen(priceMax, ta.highest(div_lookback_period), 1)
+
+y3 = ta.valuewhen(oscMax, currenttrough5, 0)  // identifies the value of PPO in the most recent top of PPO 
+y4 = ta.valuewhen(oscMax, currenttrough5, 1)  // identifies the value of PPO in the second most recent top of PPO 
+
+y7 = ta.valuewhen(oscMins, currenttrough4, 0)  // identifies the value of PPO in the most recent bottom of PPO
+y8 = ta.valuewhen(oscMins, currenttrough4, 1)  // identifies the value of PPO in the SECOND most recent bottom of PPO
+
+y9 = ta.valuewhen(oscMins, currenttrough6, 0)
+y10 = ta.valuewhen(oscMax, currenttrough7, 0)
+
+bulldiv = BottomPointsInPPO ? d[1] : na  // plots dots at bottoms in the PPO
+beardiv = TopPointsInPPO ? d[1] : na  // plots dots at tops in the PPO
+
+i = currenttrough5 < ta.highest(d, div_lookback_period)  // long term bearish oscilator divergence
+i2 = y10 > long_term_bear_filt  // long term bearish top divergence
+i3 = delayedhigh > long_term_bear_filt  // long term bearish delayedhigh divergence
+
+i4 = currenttrough4 > ta.lowest(d, div_lookback_period)  // long term bullish osc divergence
+i5 = y9 < long_term_bull_filt  // long term bullish bottom div
+i6 = delayedlow < long_term_bull_filt  // long term bullish delayedbottom div
+
+//plot(0, color=gray)
+//plot(d, color=black)
+//plot(bulldiv, title = "Bottoms", color=maroon, style=circles, linewidth=3, offset= -1)
+//plot(beardiv, title = "Tops", color=green, style=circles, linewidth=3, offset= -1)
+
+
+bearishdiv1 = y10 > y2 and oscMax and y3 < y4 ? true : false
+bearishdiv2 = delayedhigh > y2 and y3 < y4 ? true : false
+bearishdiv3 = long_term_div and oscMax and i and i2 ? true : false
+bearishdiv4 = long_term_div and i and i3 ? true : false
+
+bullishdiv1 = y9 < y6 and oscMins and y7 > y8 ? true : false
+bullishdiv2 = delayedlow < y6 and y7 > y8 ? true : false
+bullishdiv3 = long_term_div and oscMins and i4 and i5 ? true : false
+bullishdiv4 = long_term_div and i4 and i6 ? true : false
+
+bearish = bearishdiv1 or bearishdiv2 or bearishdiv3 or bearishdiv4
+bullish = bullishdiv1 or bullishdiv2 or bullishdiv3 or bullishdiv4
+
+greendot = beardiv != 0 ? true : false
+reddot = bulldiv != 0 ? true : false
+
+
+plotshape(bearish ? d : na, text='▼\nP', style=shape.labeldown, location=location.abovebar, color=color.new(color.maroon, 0), textcolor=color.new(color.white, 0), offset=0)
+plotshape(bullish ? d : na, text='P\n▲', style=shape.labelup, location=location.belowbar, color=color.new(color.green, 0), textcolor=color.new(color.white, 0), offset=0)
+plotshape(topbots and greendot ? d : na, text='', style=shape.triangledown, location=location.abovebar, color=color.new(color.maroon, 0), offset=-1)
+plotshape(topbots and reddot ? d : na, text='', style=shape.triangleup, location=location.belowbar, color=color.new(color.green, 0), offset=-1)
+
+//barcolor(bearishdiv1 or bearishdiv2 or bearishdiv3 or bearishdiv4 ? orange : na)
+//barcolor(bullishdiv1 or bullishdiv2 or bullishdiv3 or bullishdiv4 ? fuchsia : na)
+//barcolor(#dedcdc)
+
+
+
+// compra e venda por ema
+
+
+
+r7 = input.int(100, title='Period', minval=1)
+b7 = ta.ema(close, r7)
+buy7 = close > b7 and low <= b7 and open > b7 or open < b7 and close > b7
+sell7 = close < b7 and high >= b7 and open < b7 or open > b7 and close < b7
+plotshape(buy7, color=color.new(color.green, 10), location=location.belowbar, style=shape.arrowup, text='Buy')
+plotshape(sell7, color=color.new(color.red, 10), location=location.abovebar, style=shape.arrowdown, text='Sell')
+
+
+
+// doji harami
+
+
+pctDw = input.int(60, minval=0, maxval=90, title='Doji, Min % of Range of Candle for Wicks')
+pipMin = input.int(0, minval=0, title='Doji, Previous Candle Min Pip Body Size')
+sname = input(true, title='Show Price Action Bar Names')
+cbar = input(false, title='Highlight Harami & Doji Bars')
+sHm = input(false, title='Show Only Harami Style Doji\'s')
+setalm = input(true, title='Generate Alert for Harami & Doji Bars')
+uha = input(true, title='Use Heikin Ashi Candles for Calculations')
+bars = input.int(3, minval=1, maxval=3, step=1, title='Doji, Number of Lookback Bars')
+//
+// Use only Heikinashi Candles for all calculations
+security_1 = request.security(ticker.heikinashi(syminfo.tickerid), timeframe.period, close)
+srcclose = uha ? security_1 : close
+security_2 = request.security(ticker.heikinashi(syminfo.tickerid), timeframe.period, open)
+srcopen = uha ? security_2 : open
+security_3 = request.security(ticker.heikinashi(syminfo.tickerid), timeframe.period, high)
+srchigh = uha ? security_3 : high
+security_4 = request.security(ticker.heikinashi(syminfo.tickerid), timeframe.period, low)
+srclow = uha ? security_4 : low
+
+//
+pip = syminfo.mintick
+range_1 = srchigh - srclow
+
+
+// Calculate Doji/Harami Candles
+pctCDw = pctDw / 2 * 0.01
+pctCDb = (100 - pctDw) * 0.01
+
+//Lookback Candles for bulls or bears
+lbBull = bars == 1 ? srcopen[1] > srcclose[1] : bars == 2 ? srcopen[1] > srcclose[1] and srcopen[2] > srcclose[2] : bars == 3 ? srcopen[1] > srcclose[1] and srcopen[2] > srcclose[2] and srcopen[3] > srcclose[3] : false
+lbBear = bars == 1 ? srcopen[1] < srcclose[1] : bars == 2 ? srcopen[1] < srcclose[1] and srcopen[2] < srcclose[2] : bars == 3 ? srcopen[1] < srcclose[1] and srcopen[2] < srcclose[2] and srcopen[3] < srcclose[3] : false
+
+//Lookback Candle Size only if mininum size is > 0
+lbSize = pipMin == 0 ? true : bars == 1 ? math.abs(srcopen[1] - srcclose[1]) > pipMin * pip : bars == 2 ? math.abs(srcopen[1] - srcclose[1]) > pipMin * pip and math.abs(srcopen[2] - srcclose[2]) > pipMin * pip : bars == 3 ? math.abs(srcopen[1] - srcclose[1]) > pipMin * pip and math.abs(srcopen[2] - srcclose[2]) > pipMin * pip and math.abs(srcopen[3] - srcclose[3]) > pipMin * pip : false
+
+dojiBu = srcopen[1] >= math.max(srcclose, srcopen) and srcclose[1] <= math.min(srcclose, srcopen) and lbSize and math.abs(srcclose - srcopen) < range_1 * pctCDb and srchigh - math.max(srcclose, srcopen) > pctCDw * range_1 and math.min(srcclose, srcopen) - srclow > pctCDw * range_1 ? 1 : 0
+
+dojiBe = srcclose[1] >= math.max(srcclose, srcopen) and srcopen[1] <= math.min(srcclose, srcopen) and lbSize and math.abs(srcclose - srcopen) < range_1 * pctCDb and srchigh - math.max(srcclose, srcopen) > pctCDw * range_1 and math.min(srcclose, srcopen) - srclow > pctCDw * range_1 ? 1 : 0
+
+haramiBull = (srcopen <= srcclose or math.max(srcclose, srcopen) - math.min(srcclose, srcopen) < pip * 0.5) and lbBull and dojiBu
+haramiBear = (srcopen >= srcclose or math.max(srcclose, srcopen) - math.min(srcclose, srcopen) < pip * 0.5) and lbBear and dojiBe
+
+dojiBull = not sHm and not haramiBull and not haramiBear and lbBull and dojiBu
+dojiBear = not sHm and not haramiBull and not haramiBear and lbBear and dojiBe
+
+//
+plotshape(haramiBear and sname ? srchigh : na, title='Bearish Harami', text='Bearish\nHarami', color=color.new(color.red, 0), style=shape.arrowdown, location=location.abovebar)
+plotshape(haramiBear and cbar ? math.max(srcopen, srcclose) : na, title='Bear Colour Harami', color=color.new(color.red, 0), style=shape.circle, location=location.absolute, size=size.normal)
+//
+plotshape(haramiBull and sname ? srclow : na, title='Bullish Harami', text='Bullish\nHarami', color=color.new(color.green, 0), style=shape.arrowup, location=location.belowbar)
+plotshape(haramiBull and cbar ? math.max(srcopen, srcclose) : na, title='Bull Colour Harami', color=color.new(color.green, 0), style=shape.circle, location=location.absolute, size=size.normal)
+//
+plotshape(dojiBear and sname ? srchigh : na, title='Bearish Doji', text='Bearish\nDoji', color=color.new(color.fuchsia, 0), style=shape.arrowdown, location=location.abovebar)
+plotshape(dojiBear and cbar ? math.max(srcopen, srcclose) : na, title='Bear Colour Doji', color=color.new(color.fuchsia, 0), style=shape.circle, location=location.absolute, size=size.normal)
+//
+plotshape(dojiBull and sname ? srclow : na, title='Bullish Doji', text='Bullish\nDoji', color=color.new(color.aqua, 0), style=shape.arrowup, location=location.belowbar)
+plotshape(dojiBull and cbar ? math.max(srcopen, srcclose) : na, title='Bull Colour Doji', color=color.new(color.aqua, 0), style=shape.circle, location=location.absolute, size=size.normal)
+
+// Only Alert harami Doji's
+bcolor = haramiBull ? 1 : haramiBear ? 2 : dojiBull ? 3 : dojiBear ? 4 : 0
+baralert = setalm and bcolor > 0
+alertcondition(baralert, title='PACDOJI Alert', message='PACDOJI Alert')
+
+//
+plotshape(na(baralert[1]) ? na : baralert[1], style=shape.circle, location=location.bottom, offset=-1, title='Bar Alert Confirmed', color=bcolor[1] == 1 ? color.green : bcolor[1] == 2 ? color.red : bcolor[1] == 3 ? color.aqua : bcolor[1] == 4 ? color.fuchsia : na, transp=0)
+
+//
+
