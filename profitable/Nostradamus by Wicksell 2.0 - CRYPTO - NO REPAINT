@@ -1,3 +1,6 @@
+// https://www.tradingview.com/script/DNjH5QA9-MACD-RSI-EMA-SMA-Ichimoku-overbought-buy-sell-Doji/
+
+
 //@version=5
 strategy('Nostradamus by Wicksell 2.0', overlay=true, default_qty_type=strategy.percent_of_equity, default_qty_value=100)
 
