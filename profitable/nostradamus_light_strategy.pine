@@ -1,0 +1,50 @@
+//@version=5
+// https://www.tradingview.com/script/DNjH5QA9-MACD-RSI-EMA-SMA-Ichimoku-overbought-buy-sell-Doji/
+
+strategy('Nostradamus by Wicksell 2.0 IHAR light', overlay=true, default_qty_value=1, initial_capital=10000, currency=currency.USD)
+
+// Inputs
+inpTakeProfit = input.int(defval=100000000, title='Take Profit', minval=0)
+inpStopLoss = input.int(defval=5000, title='Stop Loss', minval=0)
+inpTrailStop = input.int(defval=1000, title='Trailing Stop Loss', minval=0)
+inpTrailOffset = input.int(defval=0, title='Trailing Stop Loss Offset', minval=0)
+
+// if an input is less than 1, assuming not wanted so we assign 'na' value to disable it.
+useTakeProfit = inpTakeProfit >= 1 ? inpTakeProfit : na
+useStopLoss = inpStopLoss >= 1 ? inpStopLoss : na
+useTrailStop = inpTrailStop >= 1 ? inpTrailStop : na
+useTrailOffset = inpTrailOffset >= 1 ? inpTrailOffset : na
+
+// functions
+IsLong() =>
+    strategy.position_size > 0
+
+IsShort() =>
+    strategy.position_size < 0
+
+// Long Entries 
+longEntry() =>
+    ta.rsi(close, 2) <= 20 and close >= ta.sma(close, 200) and ta.ema(close, 20) and barstate.isconfirmed
+longExit() =>
+    ta.ema(close, 80) and ta.rsi(close, 2) >= 80 and barstate.isconfirmed
+
+if longEntry() and not IsLong()
+    strategy.entry(id='Long', direction=strategy.long)
+if longExit()
+    strategy.close(id='Long')
+
+strategy.exit('ShortExit', from_entry='Short', profit=useTakeProfit, loss=useStopLoss, trail_points=useTrailStop, trail_offset=useTrailOffset)
+
+// Short entries
+shortEntry() =>
+    ta.rsi(close[1], 2) >= 80 and close[1] <= ta.sma(close[1], 200) and ta.ema(close[1], 80) and barstate.isconfirmed
+shortExit() =>
+    low <= ta.ema(close[1], 20) and ta.rsi(close[1], 2) <= 10 and barstate.isconfirmed
+
+if shortEntry() and not IsShort()
+    strategy.entry(id='Short', direction=strategy.short)
+if shortExit()
+    strategy.close(id='Short')
+
+strategy.exit('LongExit', from_entry='Long', profit=useTakeProfit, loss=useStopLoss, trail_points=useTrailStop, trail_offset=useTrailOffset)
+
