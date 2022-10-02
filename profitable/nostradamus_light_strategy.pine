@@ -1,13 +1,22 @@
 //@version=5
 // https://www.tradingview.com/script/DNjH5QA9-MACD-RSI-EMA-SMA-Ichimoku-overbought-buy-sell-Doji/
-
-strategy('Nostradamus by Wicksell 2.0 IHAR light', overlay=true, default_qty_value=1, initial_capital=10000, currency=currency.USD)
+strategy(
+     'Nostradamus by Wicksell 2.0 IHAR light', 
+     overlay=true, default_qty_value=1,
+     initial_capital=10000, 
+     currency=currency.USD, 
+     use_bar_magnifier=true, 
+     calc_on_every_tick=true)
 
 // Inputs
-inpTakeProfit = input.int(defval=100000000, title='Take Profit', minval=0)
-inpStopLoss = input.int(defval=5000, title='Stop Loss', minval=0)
-inpTrailStop = input.int(defval=1000, title='Trailing Stop Loss', minval=0)
-inpTrailOffset = input.int(defval=0, title='Trailing Stop Loss Offset', minval=0)
+inpTakeProfit = input.int(defval=100000000, title='Take Profit (ticks)', minval=0, group="SL & TP Strategy Settings")
+inpStopLoss = input.int(defval=5000, title='Stop Loss (ticks)', minval=0, group="SL & TP Strategy Settings")
+inpTrailStop = input.int(defval=1000, title='Trailing Stop Loss (ticks)', minval=0, group="SL & TP Strategy Settings")
+inpTrailOffset = input.int(defval=0, title='Trailing Stop Loss Offset (ticks)', minval=0, group="SL & TP Strategy Settings")
+
+pineconnectorLicenseID = input.string(title='Pineconnector License ID', defval='6388198605013', group='Pineconnector Alert Settings')
+pineconnectorInputSymbol = input.string(title='Symbol for close alert (MT4/MT5)', defval='EURUSD', group='Pineconnector Alert Settings')
+pineconnectorVolume = input.float(0.4, 'Volume (lots size)', minval=0.0, step=0.1, group='Pineconnector Alert Settings')
 
 // if an input is less than 1, assuming not wanted so we assign 'na' value to disable it.
 useTakeProfit = inpTakeProfit >= 1 ? inpTakeProfit : na
@@ -21,6 +30,20 @@ IsLong() =>
 
 IsShort() =>
     strategy.position_size < 0
+    
+strTicksToPips(ticks) =>
+    str.tostring(ticks * syminfo.mintick)
+
+// alert(licenseID + ',buy,' + inputSymbol + ',sl=' + str.tostring(StopLoss) + ',tp=' + str.tostring(TakeProfit) + ',risk=' + str.tostring(Volume))
+pineconnectorAlert(direction) =>
+     pineconnectorLicenseID +
+     ',' + direction +
+     ',' + pineconnectorInputSymbol +
+     ',sl=' + strTicksToPips(inpStopLoss) +
+     ',tp=' + strTicksToPips(inpTakeProfit) +
+     ',risk=' + str.tostring(pineconnectorVolume) +
+     ',trailtrig=' + strTicksToPips(inpTrailStop) +
+     ',betrigger=' + strTicksToPips(inpTrailStop)
 
 // Long Entries 
 longEntry() =>
@@ -29,8 +52,10 @@ longExit() =>
     ta.ema(close, 80) and ta.rsi(close, 2) >= 80 and barstate.isconfirmed
 
 if longEntry() and not IsLong()
+    alert(pineconnectorAlert('long'))
     strategy.entry(id='Long', direction=strategy.long)
 if longExit()
+    // alert('closelong')
     strategy.close(id='Long')
 
 strategy.exit('ShortExit', from_entry='Short', profit=useTakeProfit, loss=useStopLoss, trail_points=useTrailStop, trail_offset=useTrailOffset)
@@ -42,8 +67,10 @@ shortExit() =>
     low <= ta.ema(close[1], 20) and ta.rsi(close[1], 2) <= 10 and barstate.isconfirmed
 
 if shortEntry() and not IsShort()
+    alert(pineconnectorAlert('short'))
     strategy.entry(id='Short', direction=strategy.short)
 if shortExit()
+    // alert('closeshort')
     strategy.close(id='Short')
 
 strategy.exit('LongExit', from_entry='Long', profit=useTakeProfit, loss=useStopLoss, trail_points=useTrailStop, trail_offset=useTrailOffset)
