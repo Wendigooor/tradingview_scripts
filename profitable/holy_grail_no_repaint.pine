@@ -1,9 +1,7 @@
 // https://www.tradingview.com/script/Mc2wPUg2-Pinescript-v4-The-Holy-Grail-Trailing-Stop/
-
 //@version=5
-//Time Frame: H1
 strategy(
-     'Pin Bar Magic v1 IHAR',
+     'The Holy Grail',
      overlay=true,
      default_qty_value=1,
      initial_capital=10000, 
@@ -16,11 +14,12 @@ usr_risk = input.int(title='Equity Risk (%)', minval=1, maxval=100, step=1, defv
 atr_mult = input.float(title='Stop Loss (x*ATR, Float)', minval=0.1, maxval=100, step=0.1, defval=0.5, confirm=false)
 slPoints = input.int(title='Stop Loss Trail Points (Pips)', minval=1, maxval=1000, step=1, defval=1, confirm=false)
 slOffset = input.int(title='Stop Loss Trail Offset (Pips)', minval=1, maxval=1000, step=1, defval=1, confirm=false)
+slHardPoints = input.int(title='Hard Stop Loss (Pips)', minval=1, maxval=1000, step=1, defval=1, confirm=false)
 sma_slow = input.int(title='Slow SMA (Period)', minval=1, maxval=500, step=1, defval=50, confirm=false)
 ema_medm = input.int(title='Medm EMA (Period)', minval=1, maxval=500, step=1, defval=18, confirm=false)
 ema_fast = input.int(title='Fast EMA (Period)', minval=1, maxval=500, step=1, defval=6, confirm=false)
 atr_valu = input.int(title='ATR (Period)', minval=1, maxval=500, step=1, defval=14, confirm=false)
-ent_canc = input.int(title='Cancel Entry After X Bars (Period)', minval=1, maxval=500, step=1, defval=3, confirm=false)
+plot_everything = input.bool(false, 'Draw smth on chart?')
 
 // Create Indicators
 slowSMA = ta.sma(close, sma_slow)
@@ -49,7 +48,7 @@ enterlong() =>
     entryPrice = high[1]
     units = risk / (entryPrice - stopLoss)
     strategy.entry('long', strategy.long, stop=entryPrice)
-    strategy.exit('exit long', from_entry='long', trail_points=slPoints, trail_offset=slOffset)
+    strategy.exit('exit long', from_entry='long', loss=slHardPoints, trail_points=slPoints, trail_offset=slOffset)
 
 // Short Entry Function
 entershort() =>
@@ -58,7 +57,7 @@ entershort() =>
     entryPrice = low[1]
     units = risk / (stopLoss - entryPrice)
     strategy.entry('short', strategy.short, stop=entryPrice)
-    strategy.exit('exit short', from_entry='short', trail_points=slPoints, trail_offset=slOffset)
+    strategy.exit('exit short', from_entry='short', loss=slHardPoints, trail_points=slPoints, trail_offset=slOffset)
 
 // Execute Long Entry
 if longEntry
@@ -67,36 +66,26 @@ if longEntry
 // Execute Short Entry
 if shortEntry
     entershort()
+    
+closeAllCondition() =>
+     (ta.crossunder(fastEMA, medmEMA) and barstate.isconfirmed) or
+     (ta.crossover(fastEMA, medmEMA) and barstate.isconfirmed)
 
-// Cancel the Entry if Bar Time is Exceeded
-// strategy.cancel('long', ta.barssince(longEntry) > ent_canc)
-// strategy.cancel('short', ta.barssince(shortEntry) > ent_canc)
+if closeAllCondition()
+    strategy.close_all()
 
-// Force Close During Certain Conditions
-strategy.close_all(when=hour == 16 and dayofweek == dayofweek.friday, comment='exit all, market-closed')
-strategy.close_all(when=ta.crossunder(fastEMA, medmEMA), comment='exit long, re-cross')
-strategy.close_all(when=ta.crossover(fastEMA, medmEMA), comment='exit short, re-cross')
+// // Force Close During Certain Conditions
+// strategy.close_all(when=, comment='exit long, re-cross')
+// strategy.close_all(when=, comment='exit short, re-cross')
 
 // Plot Moving Averages to Chart
-plot(fastEMA, color=color.new(color.red, 0))
-plot(medmEMA, color=color.new(color.blue, 0))
-plot(slowSMA, color=color.new(color.green, 0))
+// plot(fastEMA, color=color.new(color.red, 0))
+// plot(medmEMA, color=color.new(color.blue, 0))
+// plot(slowSMA, color=color.new(color.green, 0))
 
 // Plot Pin Bars to Chart
-plotshape(bullishPinBar, text='Bull PB', style=shape.labeldown, location=location.abovebar, color=color.new(color.green, 0), textcolor=color.new(color.white, 0))
-plotshape(bearishPinBar, text='Bear PB', style=shape.labelup, location=location.belowbar, color=color.new(color.red, 0), textcolor=color.new(color.white, 0))
-
-// Plot Days of Week
-plotshape(hour == 0 and dayofweek == dayofweek.monday, text='Monday', style=shape.labeldown, location=location.abovebar, color=color.new(color.black, 0), textcolor=color.new(color.white, 0))
-plotshape(hour == 0 and dayofweek == dayofweek.tuesday, text='Tuesday', style=shape.labeldown, location=location.abovebar, color=color.new(color.black, 0), textcolor=color.new(color.white, 0))
-plotshape(hour == 0 and dayofweek == dayofweek.wednesday, text='Wednesday', style=shape.labeldown, location=location.abovebar, color=color.new(color.black, 0), textcolor=color.new(color.white, 0))
-plotshape(hour == 0 and dayofweek == dayofweek.thursday, text='Thursday', style=shape.labeldown, location=location.abovebar, color=color.new(color.black, 0), textcolor=color.new(color.white, 0))
-plotshape(hour == 0 and dayofweek == dayofweek.friday, text='Friday', style=shape.labeldown, location=location.abovebar, color=color.new(color.black, 0), textcolor=color.new(color.white, 0))
-plotshape(hour == 16 and dayofweek == dayofweek.friday, text='Market Closed', style=shape.labeldown, location=location.abovebar, color=color.new(color.black, 0), textcolor=color.new(color.white, 0))
-
-
-
-
+plotshape(bullishPinBar and plot_everything, text='Bull PB', style=shape.labeldown, location=location.abovebar, color=color.new(color.green, 0), textcolor=color.new(color.white, 0))
+plotshape(bearishPinBar and plot_everything, text='Bear PB', style=shape.labelup, location=location.belowbar, color=color.new(color.red, 0), textcolor=color.new(color.white, 0))
 
 
 
