@@ -1,0 +1,201 @@
+//@version=5
+strategy(title="Stoch-RSI strategy with Crossover Alerts IHAR", overlay=true, default_qty_value=1, initial_capital=10000, currency=currency.USD)
+
+// ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- -----
+// ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- -----
+
+// Input data to configure on chart
+stoch_rsi_settings_group_name = "//-----//-----//----- Stoch RSI settings -----//-----//-----//"
+smooth_k = input.int (defval=3, title = "Stochastic %K", minval=1, step=1, group=stoch_rsi_settings_group_name)
+smooth_d = input.int (defval=3, title = "Stochastic %D", minval=1, step=1, group=stoch_rsi_settings_group_name)
+stoch_length = input.int (defval=14, title = "Stochastic Length", minval=1, step=1, group=stoch_rsi_settings_group_name)
+lower_band = input.int(defval = 20, title = "Stochastic lower trigger band", minval=1, step=1, group=stoch_rsi_settings_group_name)
+upper_band = input.int(defval = 80, title = "Stochastic upper trigger band", minval=1, step=1, group=stoch_rsi_settings_group_name)
+
+rsi_settings_group_name = "//-----//-----//----- RSI settings -----//-----//-----//"
+rsi_length = input.int (defval=14, title = "RSI Length", minval=1, step=1, group=rsi_settings_group_name)
+src4 = input(close, title="RSI Source", group=rsi_settings_group_name)
+
+ema_settings_group_name = "//-----//-----//----- EMA settings -----//-----//-----//"
+use_ema = input.bool(true, title="Use EMA as Filter", group=ema_settings_group_name)
+ema_length = input.int (defval=200, title = "EMA", minval=1, step=1, group=ema_settings_group_name)
+
+// ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- -----
+// ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- -----
+
+TPPoints = input.int(title="Long Take Profit (Points)", minval=0, step=1, defval=25, group="TP & SL")
+SLPoints = input.int(title="Long Stop Loss (Points)", minval=0, step=1, defval=10, group="TP & SL")
+
+TPLong = strategy.position_avg_price + TPPoints
+SLLong = strategy.position_avg_price - SLPoints
+
+TPShort = strategy.position_avg_price - TPPoints
+SLShort = strategy.position_avg_price + SLPoints
+
+
+// functions
+IsLong() =>
+    strategy.position_size > 0
+
+IsShort() =>
+    strategy.position_size < 0
+
+
+////// TRAILING SL
+
+var float defaultTralingLongStopLossPercentage = 1
+var float defaultTralingShortStopLossPercentage = 1
+var float defaultTralingLongStopLossPoints = 12
+var float defaultTralingShortStopLossPoints = 8
+var bool defaultUseTrailingStops = false
+var bool defaultUseTrailingStopsPoints = false
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+//Trailing SL
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+
+useTrailingSL = input.bool(defaultUseTrailingStops, title='Use Trailing SL', group='Traling SL')
+useTrailingStopsInPoints = input.bool(defaultUseTrailingStopsPoints, title='Use Trailing SL POINTS', group='Traling SL')
+
+// Configure trail stop level with input options (optional)
+
+// points
+longTrailPoints = input.float(title="Trail Long Loss (points)", minval=0.0, step=0.5, defval=defaultTralingLongStopLossPoints, group='Traling SL')
+shortTrailPoints = input.float(title="Trail Short Loss (points)", minval=0.0, step=0.5, defval=defaultTralingShortStopLossPoints, group='Traling SL')
+
+// percents
+longTrailPerc = input.float(title="Trail Long Loss (%)", minval=0.0, step=0.1, defval=defaultTralingLongStopLossPercentage, group='Traling SL') * 0.01
+shortTrailPerc = input.float(title="Trail Short Loss (%)", minval=0.0, step=0.1, defval=defaultTralingShortStopLossPercentage, group='Traling SL') * 0.01
+
+// Determine trail stop loss prices
+longTrailingStopPrice = 0.0
+
+longTrailingStopPrice := if IsLong()
+	// stopValue = close * (1 - longTrailPerc)
+    stopValue = useTrailingStopsInPoints ? (close - longTrailPoints) : (close * (1 - longTrailPerc))
+    math.max(stopValue, longTrailingStopPrice[1])
+else
+    0
+
+// Determine trailing short price
+shortTrailingStopPrice = 0.0
+
+shortTrailingStopPrice := if IsShort()
+	// stopValue = close * (1 + shortTrailPerc)
+    stopValue = useTrailingStopsInPoints ? (close + shortTrailPoints) : (close * (1 + shortTrailPerc))
+    math.min(stopValue, shortTrailingStopPrice[1])
+else
+    999999
+
+// Calculate indicator
+rsi1 = ta.rsi(src4, rsi_length)
+k = ta.sma(ta.stoch(rsi1, rsi1, rsi1, stoch_length), smooth_k)
+d = ta.sma(k, smooth_d)
+
+confirmed_price = close[1]
+
+// you cannot draw EMA on MAIN chart at the main chart using two plot (stoch rsi plot + chart/candles plot)
+ema = ta.ema(confirmed_price, ema_length)
+
+long_ema_condition = use_ema ? (confirmed_price > ema) : true
+short_ema_condition = use_ema ? (confirmed_price < ema) : true
+
+long_entry_signal = ta.crossover(k, lower_band) and (k > d) and long_ema_condition and barstate.isconfirmed
+long_exit_signal = (k > upper_band) and ta.crossunder(k, d) and long_ema_condition and barstate.isconfirmed
+
+short_entry_signal = (k > upper_band) and ta.crossunder(k, d) and short_ema_condition and barstate.isconfirmed
+short_exit_signal = ta.crossover(k, lower_band) and (k > d) and short_ema_condition and barstate.isconfirmed
+
+//
+///////
+//
+
+if long_entry_signal and not IsLong()
+	// strategy.close_all()
+	strategy.entry("buy", strategy.long)
+// if long_exit_signal
+	// strategy.close_all()
+if short_entry_signal and not IsShort()
+	// strategy.close_all()
+	strategy.entry("sell", strategy.short)
+// if short_exit_signal
+// 	strategy.close_all()
+
+// if IsLong() // SL for 'long' trades
+//     strategy.exit("buy", limit = TPLong, stop = SLLong)
+// if IsShort() // SL for 'short' trades
+//     strategy.exit("sell", limit = TPShort, stop = SLShort)
+
+// EXIT
+if IsLong()
+    if useTrailingSL
+        strategy.exit('longexit TR', stop=longTrailingStopPrice)
+    else
+        strategy.exit("buy", limit = TPLong, stop = SLLong)
+if IsShort()
+    if useTrailingSL
+        strategy.exit('shortexit TR', stop=shortTrailingStopPrice)
+    else
+        strategy.exit("sell", limit = TPShort, stop = SLShort)
+
+
+// ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- -----
+// ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- -----
+
+// Drawing - plot on chart
+plot(series=ema, color=color.purple, linewidth=2, title="EMA")
+
+plot(IsShort() and useTrailingSL ? shortTrailingStopPrice : na, title='trailing short SL', color=color.red, linewidth = 2, style=plot.style_linebr)
+plot(IsLong() and useTrailingSL ? longTrailingStopPrice : na, title='trailing short SL', color=color.green, linewidth = 2, style=plot.style_linebr)
+
+plotshape(
+	 long_entry_signal ? true : na,
+	 title="Long Entry",
+	 style=shape.labelup,
+	 location=location.belowbar,
+	 color=color.green,
+	 size=size.small
+     )
+     
+plotshape(
+	 long_exit_signal ? true : na,
+	 title="Long Exit",
+	 style=shape.labeldown,
+	 location=location.abovebar,
+	 color=color.orange,
+	 size=size.small
+     )
+
+
+plotshape(
+	 short_entry_signal ? true : na,
+	 title="Short Entry",
+	 style=shape.labeldown,
+	 location=location.abovebar,
+	 color=color.red,
+	 size=size.small
+     )
+     
+plotshape(
+	 short_exit_signal ? true : na,
+	 title="Short Exit",
+	 style=shape.labelup,
+	 location=location.belowbar,
+	 color=color.teal,
+	 size=size.small
+     )
+
+
+// Plot take profit values for confirmation (for 'long' trades)
+plot(series=IsLong() and not useTrailingSL ? TPLong : na, color=color.green, style=plot.style_linebr, linewidth=2, title="Long TP")
+plot(series=IsLong() and not useTrailingSL ? SLLong : na, color=color.red,   style=plot.style_linebr, linewidth=2, title="Long SL")
+
+// Plot take profit values for confirmation (for 'short' trades)
+plot(series=IsShort() and not useTrailingSL ? TPShort : na, color=color.green,   style=plot.style_linebr, linewidth=2, title="Short TP")
+plot(series=IsShort() and not useTrailingSL ? SLShort : na, color=color.red,     style=plot.style_linebr, linewidth=2, title="Short SL")
+
+
+// ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- -----
+// ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- -----
+
+
