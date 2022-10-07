@@ -1,0 +1,113 @@
+// https://www.tradingview.com/script/Mc2wPUg2-Pinescript-v4-The-Holy-Grail-Trailing-Stop/
+//@version=5
+strategy(
+     'The Holy Grail EURUSD',
+     overlay=true,
+     default_qty_value=10000,
+     initial_capital=5000, 
+     currency=currency.USD,  
+     calc_on_every_tick=true)
+
+// User Input
+usr_risk = input.int(title='Equity Risk (%)', minval=1, maxval=100, step=1, defval=3, confirm=false)
+atr_mult = input.float(title='Stop Loss (x*ATR, Float)', minval=0.1, maxval=100, step=0.1, defval=0.5, confirm=false)
+slPoints = input.int(title='Stop Loss Trail Points (Pips)', minval=1, maxval=1000, step=1, defval=120, confirm=false)
+slOffset = input.int(title='Stop Loss Trail Offset (Pips)', minval=1, maxval=1000, step=1, defval=1, confirm=false)
+slHardPoints = input.int(title='Hard Stop Loss (Pips)', minval=1, maxval=1000, step=1, defval=110, confirm=false)
+sma_slow = input.int(title='Slow SMA (Period)', minval=1, maxval=500, step=1, defval=40, confirm=false)
+ema_medm = input.int(title='Medm EMA (Period)', minval=1, maxval=500, step=1, defval=10, confirm=false)
+ema_fast = input.int(title='Fast EMA (Period)', minval=1, maxval=500, step=1, defval=6, confirm=false)
+atr_valu = input.int(title='ATR (Period)', minval=1, maxval=500, step=1, defval=14, confirm=false)
+plot_everything = input.bool(false, 'Draw smth on chart?')
+
+pinbarConfirmationValue = input.float(title = 'Pinbar confirmation value', minval = 0.0, defval = 0.3, step=0.01)
+
+// Create Indicators
+slowSMA = ta.sma(close, sma_slow)
+medmEMA = ta.ema(close, ema_medm)
+fastEMA = ta.ema(close, ema_fast)
+bullishPinBar = close > open and open - low > pinbarConfirmationValue * (high - low) or close < open and close - low > pinbarConfirmationValue * (high - low) and barstate.isconfirmed
+bearishPinBar = close > open and high - close > pinbarConfirmationValue * (high - low) or close < open and high - open > pinbarConfirmationValue * (high - low) and barstate.isconfirmed
+atr = ta.atr(atr_valu)
+
+// Specify Trend Conditions
+fanUpTrend = fastEMA > medmEMA and medmEMA > slowSMA and barstate.isconfirmed
+fanDnTrend = fastEMA < medmEMA and medmEMA < slowSMA and barstate.isconfirmed
+
+// Specify Piercing Conditions
+bullPierce = low < fastEMA and open > fastEMA and close > fastEMA or low < medmEMA and open > medmEMA and close > medmEMA or low < slowSMA and open > slowSMA and close > slowSMA and barstate.isconfirmed
+bearPierce = high > fastEMA and open < fastEMA and close < fastEMA or high > medmEMA and open < medmEMA and close < medmEMA or high > slowSMA and open < slowSMA and close < slowSMA and barstate.isconfirmed
+
+// Specify Entry Conditions
+longEntry = fanUpTrend and bullishPinBar and bullPierce and barstate.isconfirmed
+shortEntry = fanDnTrend and bearishPinBar and bearPierce and barstate.isconfirmed
+
+pineconnectorLicenseID = input.string(title='Pineconnector License ID', defval='6388198605013', group='Pineconnector Alert Settings')
+pineconnectorInputSymbol = input.string(title='Symbol for close alert (MT4/MT5)', defval='EURUSD', group='Pineconnector Alert Settings')
+pineconnectorVolume = input.float(0.4, 'Volume (lots size)', minval=0.0, step=0.1, group='Pineconnector Alert Settings')
+
+strTicksToPips(ticks) =>
+    str.tostring(ticks * syminfo.mintick)
+
+// alert(licenseID + ',buy,' + inputSymbol + ',sl=' + str.tostring(StopLoss) + ',tp=' + str.tostring(TakeProfit) + ',risk=' + str.tostring(Volume))
+pineconnectorAlert(direction) =>
+     pineconnectorLicenseID +
+     ',' + direction +
+     ',' + pineconnectorInputSymbol +
+     ',sl=' + str.tostring(slHardPoints / 10) +
+     ',tp=' + str.tostring(slHardPoints * 2 / 10) +
+     ',risk=' + str.tostring(pineconnectorVolume) +
+     ',trailtrig=' + str.tostring(slPoints / 10)
+
+//  ',betrigger=' + strTicksToPips(slPoints)
+
+// Long Entry Function
+enterlong() =>
+    strategy.entry('long', strategy.long)
+    alert(pineconnectorAlert('buy'))
+    strategy.exit('exit long', from_entry='long', loss=slHardPoints, trail_points=slPoints, trail_offset=slOffset)
+
+// Short Entry Function
+entershort() =>
+    strategy.entry('short', strategy.short)
+    alert(pineconnectorAlert('sell'))
+    strategy.exit('exit short', from_entry='short', loss=slHardPoints, trail_points=slPoints, trail_offset=slOffset)
+
+isLong() => strategy.position_size > 0
+isShort() => strategy.position_size < 0
+
+// Execute Long Entry
+if longEntry and not isLong() and not isShort() and barstate.isconfirmed
+    alert(pineconnectorAlert('buy'))
+    strategy.entry('long', strategy.long)
+    strategy.exit('exit long', from_entry='long', loss=slHardPoints, trail_points=slPoints, trail_offset=slOffset)
+
+// Execute Short Entry
+if shortEntry and not isLong() and not isShort() and barstate.isconfirmed
+    strategy.entry('short', strategy.short)
+    alert(pineconnectorAlert('sell'))
+    strategy.exit('exit short', from_entry='short', loss=slHardPoints, trail_points=slPoints, trail_offset=slOffset)
+    
+// closeAllCondition() =>
+//      (ta.crossunder(fastEMA, medmEMA) and barstate.isconfirmed) or
+//      (ta.crossover(fastEMA, medmEMA) and barstate.isconfirmed)
+
+// if closeAllCondition()
+//     strategy.close_all()
+
+// // Force Close During Certain Conditions
+// strategy.close_all(when=, comment='exit long, re-cross')
+// strategy.close_all(when=, comment='exit short, re-cross')
+
+// Plot Moving Averages to Chart
+// plot(fastEMA, color=color.new(color.red, 0))
+// plot(medmEMA, color=color.new(color.blue, 0))
+// plot(slowSMA, color=color.new(color.green, 0))
+
+// Plot Pin Bars to Chart
+plotshape(bullishPinBar and plot_everything, text='Bull PB', style=shape.labeldown, location=location.abovebar, color=color.new(color.green, 0), textcolor=color.new(color.white, 0))
+plotshape(bearishPinBar and plot_everything, text='Bear PB', style=shape.labelup, location=location.belowbar, color=color.new(color.red, 0), textcolor=color.new(color.white, 0))
+
+
+
+
