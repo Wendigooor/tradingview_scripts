@@ -1,0 +1,132 @@
+//@version=5
+
+strategy("Smoothed Heiken Ashi OVERLAY",
+     "SHA OVERLAY",
+     default_qty_value=1,
+     initial_capital=10000, 
+     currency=currency.USD, 
+     calc_on_every_tick=true,
+     overlay=true)
+
+import wallneradam/TAExt/8
+
+//
+// User inputs
+//
+ha_smooth_length = input.int(10, "Smooth Length", minval=1, group="Before HA")
+ha_smooth_ma_type = input.string('EMA', 'MA Type', options=['SMA', 'EMA', 'WMA', "VWMA", "RMA", "DEMA", "TEMA", "ZLEMA", "HMA", "ALMA", "LSMA", "SWMA", "SMMA", "JMA", "DONCHIAN", "ATRWSMA", "ATRWEMA", "ATRWRMA", "ATRWWMA"], group="Before HA")
+ha_after_smooth_length = input.int(10, "After Smooth Length", minval=1, group="After HA")      
+ha_after_smooth_ma_type = input.string('EMA', 'After MA Type', options=['SMA', 'EMA', 'WMA', "VWMA", "RMA", "DEMA", "TEMA", "ZLEMA", "HMA", "ALMA", "LSMA", "SWMA", "SMMA", "JMA", "DONCHIAN", "ATRWSMA", "ATRWEMA", "ATRWRMA", "ATRWWMA"], group="After HA")
+ha_show_buy_zone = input.bool(true, 'Show buy zone?')
+ha_buy_zone_multiplier = input.float(1, 'Buy Zone Multiplier', step = 0.5)
+
+enable_trades = input.bool(true, 'Enable Trades?', group = 'SL & TP')
+// sha_hard_sl_percentage = input.float(title="Hard SL (%)", defval = 0.2, step = 0.05, minval = 0.0, group = 'SL & TP') * 0.01
+sha_trailing_sl_percentage = input.float(title="Trailing SL (%)", defval = 0.1, step = 0.05, minval = 0.0, group = 'SL & TP') * 0.01
+// sha_trailing_sl_offset_percentage = input.float(title="Trailing SL offset (%)", defval = 0.1, step = 0.05, minval = 0.0, group = 'SL & TP') * 0.01
+
+sha_long_trend_color = input.color(defval = color.blue, title = 'Long Trend Color', group = 'Coloring')
+sha_short_trend_color = input.color(defval = color.red, title = 'Short Trend Color', group = 'Coloring')
+
+//
+// SHA candle calculation
+//
+[sha_candle_open, sha_candle_high, sha_candle_low, sha_candle_close] = TAExt.heiken_ashi(smooth_length=ha_smooth_length, smooth_ma_type=ha_smooth_ma_type, after_smooth_length=ha_after_smooth_length, after_smooth_ma_type=ha_after_smooth_ma_type)
+
+// sha trend
+sha_long_trend = sha_candle_open < sha_candle_close and barstate.isconfirmed
+sha_short_trend = sha_candle_open > sha_candle_close and barstate.isconfirmed
+
+// trend color
+sha_trend_color = sha_long_trend ? sha_long_trend_color : sha_short_trend ? sha_short_trend_color : na
+sha_buy_zone_color = color.new(sha_trend_color, transp = 50)
+
+// sha buy zone candle calculation
+sha_buy_zone_candle_high = ha_show_buy_zone ? (sha_long_trend ? sha_candle_high : sha_candle_low) : na
+sha_buy_zone_candle_low = ha_show_buy_zone ? (sha_long_trend ? (sha_candle_high + (sha_candle_high - sha_candle_low) / 2 * ha_buy_zone_multiplier) : (sha_candle_low - (sha_candle_high - sha_candle_low) / 2 * ha_buy_zone_multiplier ) ) : na
+
+// Plotting sha candle
+plotcandle(sha_candle_open, sha_candle_high, sha_candle_low, sha_candle_close, title="Smoothed Heiken Ashi", color=sha_trend_color, wickcolor=sha_trend_color, bordercolor=sha_trend_color)
+
+// Plotting sha candle buy zone candle
+plotcandle(open=sha_buy_zone_candle_high, high=sha_buy_zone_candle_high, low=sha_buy_zone_candle_low, close=sha_buy_zone_candle_low, title="Smoothed Heiken Ashi Buy Zone", color=sha_buy_zone_color, wickcolor=sha_buy_zone_color, bordercolor=sha_buy_zone_color)
+
+
+
+
+// FUNCTIONS
+
+bars_since_last_entry = bar_index - strategy.opentrades.entry_bar_index(strategy.opentrades - 1)
+is_long = strategy.position_size > 0
+is_short = strategy.position_size < 0
+
+last_trade_position_sign = strategy.closedtrades > 0 ? math.sign(strategy.closedtrades.size(strategy.closedtrades-1)) : na
+
+last_trade_was_long = nz(last_trade_position_sign) > 0
+last_trade_was_short = nz(last_trade_position_sign) < 0
+
+
+// Hard SL and Trailing SL
+
+// Smoothed HA distance between SHA candle low and current price (last confirmed)
+// sha_hard_sl_distance_for_longs = math.abs(close - sha_candle_low[1]) // + offset
+// sha_hard_sl_distance_for_shorts = math.abs(close - sha_candle_high[1])
+
+// Determine trail stop loss prices
+long_trailing_stop_price = 0.0
+
+long_trailing_stop_price := if is_long
+    stop_value = (close * (1 - sha_trailing_sl_percentage)) // - close * sha_trailing_sl_offset_percentage
+    math.max(stop_value, long_trailing_stop_price[1])
+else
+    0
+
+// Determine trailing short price
+short_trailing_stop_price = 0.0
+
+short_trailing_stop_price := if is_short
+    stop_value = (close * (1 + sha_trailing_sl_percentage)) // + close * sha_trailing_sl_offset_percentage
+    math.min(stop_value, short_trailing_stop_price[1])
+else
+    999999
+
+
+// Signals / Entries / Exits
+
+long_entry_signal = sha_long_trend and not is_long and not last_trade_was_long and enable_trades and barstate.isconfirmed
+short_entry_signal = sha_short_trend and not is_short and not last_trade_was_short and enable_trades and barstate.isconfirmed
+
+long_exit_signal = short_entry_signal and is_long and barstate.isconfirmed
+short_exit_signal = long_entry_signal and is_short and barstate.isconfirmed
+
+if long_entry_signal
+    strategy.entry('long', direction=strategy.long)
+if short_entry_signal
+    strategy.entry('short', direction=strategy.short)
+
+if long_exit_signal
+    strategy.close_all()
+if short_exit_signal
+    strategy.close_all()
+
+if is_long
+    // strategy.exit('longexit HARD SL', 'long', stop=sha_hard_sl_distance_for_longs)
+    strategy.exit('longexit TR', 'long', stop=long_trailing_stop_price)
+if is_short
+    // strategy.exit('shortexit HARD SL', 'short', stop=sha_hard_sl_distance_for_shorts)
+    strategy.exit('shortexit TR', 'short', stop=short_trailing_stop_price)
+
+plot(is_long ? long_trailing_stop_price : na, title='trailing long SL', color=color.red, linewidth = 2, style=plot.style_linebr)
+plot(is_short ? short_trailing_stop_price : na, title='trailing short SL', color=color.red, linewidth = 2, style=plot.style_linebr)
+
+// plot(is_long ? sha_hard_sl_distance_for_longs : na, title='hard long SL', color=color.red, linewidth = 2, style=plot.style_linebr)
+// plot(is_short ? sha_hard_sl_distance_for_shorts : na, title='hard long SL', color=color.red, linewidth = 2, style=plot.style_linebr)
+
+show_debugger_infobox = input.bool(false, 'Debugger Infobox')
+if barstate.islast and show_debugger_infobox
+    infobox = table.new("bottom_right", 3, 3, bgcolor = #faedf5, frame_width = 1)
+    table.cell(infobox, 0, 0, text = str.tostring(sha_long_trend),   text_color = color.black, text_size = size.small)
+    table.cell(infobox, 0, 1, text = str.tostring(last_trade_was_long),    text_color = color.black, text_size = size.small)
+    table.cell(infobox, 0, 0, text = str.tostring(sha_short_trend),   text_color = color.black, text_size = size.small)
+    table.cell(infobox, 0, 1, text = str.tostring(last_trade_was_short),    text_color = color.black, text_size = size.small)
+    // table.cell(infobox, 0, 2, text = str.tostring(sha_long_trend and not is_long ),   text_color = color.black, text_size = size.small)
