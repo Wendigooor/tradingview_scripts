@@ -1,0 +1,186 @@
+// https://www.tradingview.com/script/Mc2wPUg2-Pinescript-v4-The-Holy-Grail-Trailing-Stop/
+// @version=5
+strategy(
+     'grail only longs',
+     overlay=true,
+     default_qty_value=10000,
+     initial_capital=5000, 
+     currency=currency.USD,  
+     calc_on_every_tick=true)
+
+// User Input
+slPoints = input.int(title='Stop Loss Trail Points (Pips)', minval=1, maxval=1000, step=1, defval=150, confirm=false)
+slOffset = input.int(title='Stop Loss Trail Offset (Pips)', minval=1, maxval=1000, step=1, defval=1, confirm=false)
+slHardPoints = input.int(title='Hard Stop Loss (Pips)', minval=1, maxval=1000, step=1, defval=100, confirm=false)
+sma_slow = input.int(title='Slow SMA (Period)', minval=1, maxval=500, step=1, defval=120, confirm=false)
+ema_medm = input.int(title='Medm EMA (Period)', minval=1, maxval=500, step=1, defval=72, confirm=false)
+ema_fast = input.int(title='Fast EMA (Period)', minval=1, maxval=500, step=1, defval=8, confirm=false)
+plot_everything = input.bool(false, 'Draw smth on chart?')
+
+pinbarConfirmationValue = input.float(title = 'Pinbar confirmation value', minval = 0.0, defval = 0.3, step=0.01)
+
+useStochasticAsFilter = input.bool(defval=false, title="Use Stochastic as Filter (OB/OS)?", group = 'Stochastic')
+
+len = input.int(14, minval=1, title="Length for Main Stochastic") 
+smoothK = input.int(3, minval=1, title="SmoothK for Main Stochastic")
+smoothD = input.int(3, minval=1, title="SmoothD for Main Stochastic")
+upLine = input.int(30, minval=0, step=5, maxval=100, title="Upper Line Value? (shorts - above line)")
+lowLine = input.int(50, minval=0, step=5, maxval=100, title="Lower Line Value? (longs - below line)")
+
+useCurrentRes = input.bool(true, title="Use Current Chart Resolution?")
+resCustom = input.timeframe(title="Use Different Timeframe? Uncheck Box Above", defval="15")
+resCustomMFI = input.timeframe(title="Use Different Timeframe MFI? Uncheck Box Above", defval="35")
+
+//Stoch formula
+k = ta.sma(ta.stoch(close, high, low, len), smoothK)
+d = ta.sma(k, smoothD)
+outK = request.security(syminfo.tickerid, resCustom, k)
+outD = request.security(syminfo.tickerid, resCustom, d)
+
+//definitions for Cross
+stochAboveLine = useStochasticAsFilter ? (outK > upLine and barstate.isconfirmed ? 1 : 0) : 1
+stochBelowLine = useStochasticAsFilter ? (outK < lowLine and barstate.isconfirmed ? 1 : 0) : 1
+
+// MFI inputs
+useMFI = input.bool(title = 'Use MFI as 2nd Filter? (current timeframe)', defval = true, group = 'MFI')
+mfiLength = input.int(title="Length", defval=8, minval=1, maxval=2000, group = 'MFI')
+mfiOversold = input.int(title="OverSold (longs - below line)", defval = 40, minval = 0, maxval = 100, group = 'MFI')
+mfiOverbought = input.int(title="OverBought (shorts - above line)", defval = 80, minval = 0, maxval = 100, group = 'MFI')
+mfiSrc = hlc3
+mfiLine = ta.mfi(mfiSrc, mfiLength)
+
+outMfiLine = request.security(syminfo.tickerid, resCustomMFI, mfiLine)
+
+// mfi signals
+mfiLongIsPossible = useMFI ? (outMfiLine <= mfiOversold and barstate.isconfirmed) : true
+mfiShortIsPossible = useMFI ? (outMfiLine >= mfiOverbought and barstate.isconfirmed) : true
+
+
+// Create Indicators
+slowSMA = ta.sma(close, sma_slow)
+medmEMA = ta.ema(close, ema_medm)
+fastEMA = ta.ema(close, ema_fast)
+bullishPinBar = close > open and open - low > pinbarConfirmationValue * (high - low) or close < open and close - low > pinbarConfirmationValue * (high - low) and barstate.isconfirmed
+bearishPinBar = close > open and high - close > pinbarConfirmationValue * (high - low) or close < open and high - open > pinbarConfirmationValue * (high - low) and barstate.isconfirmed
+
+// Specify Trend Conditions
+fanUpTrend = fastEMA > medmEMA and medmEMA < slowSMA and barstate.isconfirmed
+fanDnTrend = fastEMA < medmEMA and medmEMA < slowSMA and barstate.isconfirmed
+
+// Specify Piercing Conditions
+bullPierce = low < fastEMA and open > fastEMA and close > fastEMA or low < medmEMA and open > medmEMA and close > medmEMA or low < slowSMA and open > slowSMA and close > slowSMA and barstate.isconfirmed
+bearPierce = high > fastEMA and open < fastEMA and close < fastEMA or high > medmEMA and open < medmEMA and close < medmEMA or high > slowSMA and open < slowSMA and close < slowSMA and barstate.isconfirmed
+
+// Specify Entry Conditions
+longEntry = fanUpTrend and bullishPinBar and bullPierce and barstate.isconfirmed
+shortEntry = fanDnTrend and bearishPinBar and bearPierce and barstate.isconfirmed
+
+pineconnectorLicenseID = input.string(title='Pineconnector License ID', defval='12345', group='Pineconnector Alert Settings')
+pineconnectorInputSymbol = input.string(title='Symbol for close alert (MT4/MT5)', defval='EURUSD.i', group='Pineconnector Alert Settings')
+pineconnectorVolume = input.float(0.4, 'Volume (lots size)', minval=0.0, step=0.1, group='Pineconnector Alert Settings')
+
+strTicksToPips(ticks) =>
+    str.tostring(ticks * syminfo.mintick)
+
+// alert(licenseID + ',buy,' + inputSymbol + ',sl=' + str.tostring(StopLoss) + ',tp=' + str.tostring(TakeProfit) + ',risk=' + str.tostring(Volume))
+pineconnectorAlert(direction) =>
+     pineconnectorLicenseID +
+     ',' + direction +
+     ',' + pineconnectorInputSymbol +
+     ',sl=' + str.tostring(slHardPoints / 10) +
+     ',tp=' + str.tostring(slHardPoints * 2 / 10) +
+     ',risk=' + str.tostring(pineconnectorVolume) +
+     ',trailtrig=' + str.tostring(slPoints / 10)
+
+//  ',betrigger=' + strTicksToPips(slPoints)
+
+// Long Entry Function
+enterlong() =>
+    strategy.entry('long', strategy.long)
+    alert(pineconnectorAlert('buy'))
+    strategy.exit('exit long', from_entry='long', loss=slHardPoints, trail_points=slPoints, trail_offset=slOffset)
+
+// Short Entry Function
+entershort() =>
+    strategy.entry('short', strategy.short)
+    alert(pineconnectorAlert('sell'))
+    strategy.exit('exit short', from_entry='short', loss=slHardPoints, trail_points=slPoints, trail_offset=slOffset)
+
+isLong() => strategy.position_size > 0
+isShort() => strategy.position_size < 0
+
+
+
+
+
+
+
+
+
+
+
+
+smi_k = input.int(30, 'Percent K Length', group = 'SMI')
+smi_d = input.int(11, 'Percent D Length', group = 'SMI')
+smi_ob = input.int(20, 'Overbought', group = 'SMI')
+smi_os = input.int(-40, 'Oversold', group = 'SMI')
+// Range Calculation
+smi_ll = ta.lowest(low, smi_k)
+smi_hh = ta.highest(high, smi_k)
+smi_diff = smi_hh - smi_ll
+smi_rdiff = close - (smi_hh + smi_ll) / 2
+
+smi_avgrel = ta.ema(ta.ema(smi_rdiff, smi_d), smi_d)
+smi_avgdiff = ta.ema(ta.ema(smi_diff, smi_d), smi_d)
+// SMI calculations
+SMI = smi_avgdiff != 0 and barstate.isconfirmed ? smi_avgrel / (smi_avgdiff / 2) * 100 : 0
+SMIsignal = ta.ema(SMI, smi_d)
+emasignal = ta.ema(SMI, smi_k)
+
+smi_oversold = SMIsignal < smi_os
+
+smi_not_overbought = SMIsignal < smi_ob
+smi_not_oversold = SMIsignal > smi_os
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// Execute Long Entry
+if longEntry and not isLong() and not isShort() and stochBelowLine and mfiLongIsPossible and smi_not_overbought and barstate.isconfirmed
+    alert(pineconnectorAlert('buy'))
+    strategy.entry('long', strategy.long)
+    strategy.exit('exit long', from_entry='long', loss=slHardPoints, trail_points=slPoints, trail_offset=slOffset)
+
+// Execute Short Entry
+// if shortEntry and not isLong() and not isShort() and stochAboveLine and mfiShortIsPossible and barstate.isconfirmed
+//     strategy.entry('short', strategy.short)
+//     alert(pineconnectorAlert('sell'))
+//     strategy.exit('exit short', from_entry='short', loss=slHardPoints, trail_points=slPoints, trail_offset=slOffset)
+
+// // Force Close During Certain Conditions
+// strategy.close_all(when=, comment='exit long, re-cross')
+// strategy.close_all(when=, comment='exit short, re-cross')
+
+// Plot Moving Averages to Chart
+// plot(fastEMA, color=color.new(color.red, 0))
+// plot(medmEMA, color=color.new(color.blue, 0))
+// plot(slowSMA, color=color.new(color.green, 0))
+
+
+bgcolor(longEntry and plot_everything ? color.blue : na)
+// bgcolor(shortEntry and plot_everything ? color.red : na)
