@@ -9,16 +9,16 @@ strategy(
      calc_on_every_tick=true)
 
 // User Input
-slPoints = input.int(title='Stop Loss Trail Points (Pips)', minval=1, maxval=1000, step=1, defval=120, confirm=false)
+slPoints = input.int(title='Stop Loss Trail Points (Pips)', minval=1, maxval=1000, step=1, defval=140, confirm=false)
 slOffset = input.int(title='Stop Loss Trail Offset (Pips)', minval=1, maxval=1000, step=1, defval=1, confirm=false)
-slHardPoints = input.int(title='Hard Stop Loss (Pips)', minval=1, maxval=1000, step=1, defval=110, confirm=false)
-sma_slow = input.int(title='Slow SMA (Period)', minval=1, maxval=500, step=1, defval=140, confirm=false)
-ema_medm = input.int(title='Medm EMA (Period)', minval=1, maxval=500, step=1, defval=10, confirm=false)
-ema_fast = input.int(title='Fast EMA (Period)', minval=1, maxval=500, step=1, defval=6, confirm=false)
+slHardPoints = input.int(title='Hard Stop Loss (Pips)', minval=1, maxval=1000, step=1, defval=100, confirm=false)
+sma_slow = input.int(title='Slow SMA (Period)', minval=1, maxval=500, step=1, defval=120, confirm=false)
+ema_medm = input.int(title='Medm EMA (Period)', minval=1, maxval=500, step=1, defval=77, confirm=false)
+ema_fast = input.int(title='Fast EMA (Period)', minval=1, maxval=500, step=1, defval=9, confirm=false)
 
-pinbarConfirmationValue = input.float(title = 'Pinbar confirmation value', minval = 0.0, defval = 0.3, step=0.01)
+pinbarConfirmationValue = input.float(title = 'Pinbar confirmation value', minval = 0.0, defval = 0.15, step=0.01)
 
-useStochasticAsFilter = input.bool(defval=false, title="Use Stochastic as Filter (OB/OS)?", group = 'Stochastic')
+useStochasticAsFilter = input.bool(defval=tr, title="Use Stochastic as Filter (OB/OS)?", group = 'Stochastic')
 
 len = input.int(14, minval=1, title="Length for Main Stochastic") 
 smoothK = input.int(3, minval=1, title="SmoothK for Main Stochastic")
@@ -28,7 +28,7 @@ lowLine = input.int(50, minval=0, step=5, maxval=100, title="Lower Line Value? (
 
 useCurrentRes = input.bool(true, title="Use Current Chart Resolution?")
 resCustom = input.timeframe(title="Use Different Timeframe? Uncheck Box Above", defval="1")
-resCustomMFI = input.timeframe(title="Use Different Timeframe MFI? Uncheck Box Above", defval="3")
+resCustomMFI = input.timeframe(title="Use Different Timeframe MFI? Uncheck Box Above", defval="5")
 
 //Stoch formula
 k = ta.sma(ta.stoch(close, high, low, len), smoothK)
@@ -41,10 +41,10 @@ stochAboveLine = useStochasticAsFilter ? (outK > upLine and barstate.isconfirmed
 stochBelowLine = useStochasticAsFilter ? (outK < lowLine and barstate.isconfirmed ? 1 : 0) : 1
 
 // MFI inputs
-useMFI = input.bool(title = 'Use MFI as 2nd Filter? (current timeframe)', defval = false, group = 'MFI')
-mfiLength = input.int(title="Length", defval=14, minval=1, maxval=2000, group = 'MFI')
+useMFI = input.bool(title = 'Use MFI as 2nd Filter? (current timeframe)', defval = true, group = 'MFI')
+mfiLength = input.int(title="Length", defval=8, minval=1, maxval=2000, group = 'MFI')
 mfiOversold = input.int(title="OverSold (longs - below line)", defval = 20, minval = 0, maxval = 100, group = 'MFI')
-mfiOverbought = input.int(title="OverBought (shorts - above line)", defval = 80, minval = 0, maxval = 100, group = 'MFI')
+mfiOverbought = input.int(title="OverBought (shorts - above line)", defval = 45, minval = 0, maxval = 100, group = 'MFI')
 mfiSrc = hlc3
 mfiLine = ta.mfi(mfiSrc, mfiLength)
 
@@ -63,8 +63,8 @@ mfiShortIsPossible = useMFI ? (outMfiLine >= mfiOverbought and barstate.isconfir
 
 smi_k = input.int(10, 'Percent K Length', group = 'SMI')
 smi_d = input.int(3, 'Percent D Length', group = 'SMI')
-smi_ob = input.int(40, 'Overbought', group = 'SMI')
-smi_os = input.int(-40, 'Oversold', group = 'SMI')
+smi_ob = input.int(20, 'Overbought', group = 'SMI')
+smi_os = input.int(20, 'Oversold', group = 'SMI')
 // Range Calculation
 smi_ll = ta.lowest(low, smi_k)
 smi_hh = ta.highest(high, smi_k)
