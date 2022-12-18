@@ -1,0 +1,194 @@
+// https://www.tradingview.com/script/Mc2wPUg2-Pinescript-v4-The-Holy-Grail-Trailing-Stop/
+// @version=5
+strategy(
+     'Grail long+short RE: v2 (early exit leledc)',
+     overlay=true,
+     default_qty_value=10000,
+     initial_capital=5000, 
+     currency=currency.USD,  
+     calc_on_every_tick=true)
+
+// User Input
+slPoints = input.int(title='TP Points (Pips)', minval=1, maxval=1000, step=1, defval=150, confirm=false, inline = 'Trade Settings')
+slHardPoints = input.int(title='SL Points (Pips)', minval=1, maxval=1000, step=1, defval=90, confirm=false, inline = 'Trade Settings')
+sma_slow = input.int(title='Slow', minval=1, maxval=500, step=1, defval=70, confirm=false, inline = 'ema')
+ema_medm = input.int(title='Medm', minval=1, maxval=500, step=1, defval=40, confirm=false, inline = 'ema')
+ema_fast = input.int(title='Fast', minval=1, maxval=500, step=1, defval=8, confirm=false, inline = 'ema')
+pinbarConfirmationValue = input.float(title = 'Pinbar confirmation value', minval = 0.0, defval = 0.4, step=0.01)
+
+// Create Indicators
+slowSMA = ta.ema(close, sma_slow)
+medmEMA = ta.ema(close, ema_medm)
+fastEMA = ta.ema(close, ema_fast)
+bullishPinBar = close > open and open - low > pinbarConfirmationValue * (high - low) or close < open and close - low > pinbarConfirmationValue * (high - low) and barstate.isconfirmed
+bearishPinBar = close > open and high - close > pinbarConfirmationValue * (high - low) or close < open and high - open > pinbarConfirmationValue * (high - low) and barstate.isconfirmed
+
+// Specify Trend Conditions
+fanUpTrend = fastEMA < medmEMA and medmEMA > slowSMA and barstate.isconfirmed
+fanDnTrend = fastEMA < medmEMA and medmEMA < slowSMA and barstate.isconfirmed
+
+// Specify Piercing Conditions
+bullPierce = low < fastEMA and open > fastEMA and close > fastEMA or low < medmEMA and open > medmEMA and close > medmEMA or low < slowSMA and open > slowSMA and close > slowSMA and barstate.isconfirmed
+bearPierce = high > fastEMA and open < fastEMA and close < fastEMA or high > medmEMA and open < medmEMA and close < medmEMA or high > slowSMA and open < slowSMA and close < slowSMA and barstate.isconfirmed
+
+// Specify Entry Conditions
+longEntry = fanUpTrend and bullishPinBar and bullPierce and barstate.isconfirmed
+shortEntry = fanDnTrend and bearishPinBar and bearPierce and barstate.isconfirmed
+
+isLong() => strategy.position_size > 0
+isShort() => strategy.position_size < 0
+
+
+
+
+
+
+
+
+
+smi_k = input.int(20, 'K Length', group = 'SMI', inline = 'SMI1')
+smi_d = input.int(5, 'D Length', group = 'SMI', inline = 'SMI1')
+smi_ob = input.int(0, 'OverBought level', group = 'SMI', inline = 'SMI2')
+smi_os = input.int(0, 'OverSold level', group = 'SMI', inline = 'SMI2')
+// Range Calculation
+smi_ll = ta.lowest(low, smi_k)
+smi_hh = ta.highest(high, smi_k)
+smi_diff = smi_hh - smi_ll
+smi_rdiff = close - (smi_hh + smi_ll) / 2
+
+smi_avgrel = ta.ema(ta.ema(smi_rdiff, smi_d), smi_d)
+smi_avgdiff = ta.ema(ta.ema(smi_diff, smi_d), smi_d)
+// SMI calculations
+SMI = smi_avgdiff != 0 and barstate.isconfirmed ? smi_avgrel / (smi_avgdiff / 2) * 100 : 0
+SMIsignal = ta.ema(SMI, smi_d)
+emasignal = ta.ema(SMI, smi_k)
+
+smi_oversold = SMIsignal < smi_os
+
+smi_not_overbought = SMIsignal < smi_ob
+smi_not_oversold = SMIsignal > smi_os
+
+
+
+
+
+
+
+
+
+leledcSrc = input(close, "Major Leledec Exhausion Bar ::  Source")
+maj_qual = input(6, "Major Leledec Exhausion Bar ::  Bar count no")
+maj_len = input(16, "Major Leledec Exhausion Bar ::  Highest / Lowest")
+bindexSindex = input(1, "bindexSindex")
+closeVal = input(4, "Close")
+
+lele(qual, len) =>
+    bindex = 0
+    sindex = 0
+    bindex := nz(bindex[bindexSindex], 0)
+    sindex := nz(sindex[bindexSindex], 0)
+    ret = 0
+    if close > close[closeVal]
+        bindex := bindex + 1
+        bindex
+    if close < close[closeVal]
+        sindex := sindex + 1
+        sindex
+    if bindex > qual and close < open and high >= ta.highest(high, len)
+        bindex := 0
+        ret := -1
+        ret
+    if sindex > qual and close > open and low <= ta.lowest(low, len)
+        sindex := 0
+        ret := 1
+        ret
+    ret
+
+major = lele(maj_qual, maj_len)
+
+leledcMajorLong = major == 1 and barstate.isconfirmed
+leledcMajorShort = major == -1 and barstate.isconfirmed
+
+
+plotchar(leledcMajorLong ? low : na, char='•', location=location.absolute, color=color.lime, size=size.large)
+plotchar(leledcMajorShort ? high : na, char='•', location=location.absolute, color=color.red, size=size.large)
+
+
+
+
+
+
+
+
+
+
+
+
+////////// TD
+
+// -------- Calculate bearish trend sequence --------
+// tdBuySetup = 0
+// tdBuySetup := close < close[4] ? tdBuySetup[1] == 13 ? 1 : tdBuySetup[1] + 1 : 0
+
+// // -------- Calculate bullish trend sequence --------
+// tdSellSetup = 0
+// tdSellSetup := close > close[4] ? tdSellSetup[1] == 13 ? 1 : tdSellSetup[1] + 1 : 0
+
+useEarlyExit = input.bool(true, 'Use early exit?')
+// longEarlyExitTDNumber = input.int(8, 'long early exit TD seq number', minval = 1)
+// shortEarlyExitTDNumber = input.int(8, 'short early exit TD seq number', minval = 1)
+// longExit = useEarlyExit and tdBuySetup >= longEarlyExitTDNumber and barstate.isconfirmed
+// shortExit = useEarlyExit and tdSellSetup >= shortEarlyExitTDNumber and barstate.isconfirmed
+
+
+longEarlyExit = isLong() and useEarlyExit and leledcMajorShort
+shortEarlyExit = isShort() and useEarlyExit and leledcMajorLong
+
+
+
+
+
+
+
+
+// Execute Long Entry
+if longEntry and not isLong() and not isShort() and smi_not_overbought and barstate.isconfirmed
+    strategy.entry('long', strategy.long)
+    strategy.exit('exit long', from_entry='long', loss=slHardPoints, trail_points=slPoints)
+
+// Execute Short Entry
+if shortEntry and not isLong() and not isShort() and smi_not_oversold and barstate.isconfirmed
+    strategy.entry('short', strategy.short)
+    strategy.exit('exit short', from_entry='short', loss=slHardPoints, trail_points=slPoints)
+
+
+
+// if longExit
+//     strategy.close_all()
+// if shortExit
+//     strategy.close_all()
+
+if longEarlyExit
+    strategy.close_all()
+if shortEarlyExit
+    strategy.close_all()
+
+
+
+
+
+
+
+
+
+
+plot_trade_entries = input.bool(false, 'Draw trade entries on chart?')
+plot_smi_zones = input.bool(false, 'Draw smi zones on chart?')
+
+bgcolor(smi_not_overbought and plot_smi_zones ? color.rgb(212, 0, 145, 62) : na)
+bgcolor(smi_not_oversold and plot_smi_zones ? color.rgb(63, 95, 223, 76) : na)
+
+bgcolor(longEntry and plot_trade_entries ? color.rgb(30, 138, 226, 75) : na)
+bgcolor(shortEntry and plot_trade_entries ? color.rgb(255, 82, 82, 77) : na)
+
+// fanUpTrend
