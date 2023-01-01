@@ -1,0 +1,443 @@
+// https://www.tradingview.com/script/Mc2wPUg2-Pinescript-v4-The-Holy-Grail-Trailing-Stop/
+// @version=5
+strategy(
+     'grail longs + shorts 12345 + VVB_RSI_VOL v5 - change shorts',
+     overlay=true,
+     default_qty_value=30000,
+     initial_capital=5000, 
+     currency=currency.USD,  
+     calc_on_every_tick=true)
+
+// User Input
+slPoints = input.int(title='TP Pips', minval=1, maxval=1000, step=1, defval=200, confirm=false, inline="points")
+slHardPoints = input.int(title='SL Pips', minval=1, maxval=1000, step=1, defval=90, confirm=false, inline="points")
+sma_slow = input.int(title='Slow', minval=1, maxval=500, step=1, defval=118, confirm=false, inline="emas")
+ema_medm = input.int(title='Medm', minval=1, maxval=500, step=1, defval=48, confirm=false, inline="emas")
+ema_fast = input.int(title='Fast', minval=1, maxval=500, step=1, defval=4, confirm=false, inline="emas")
+
+pinbarConfirmationValue = input.float(title = 'Pinbar confirmation', minval = 0.0, defval = 0.3, step=0.01, inline = 'asd')
+plot_entries = input.bool(false, 'Draw entries?', inline = 'asd')
+
+useStochasticAsFilter = input.bool(defval=true, title="Use Stochastic?", group = 'Stochastic', inline = 'stoch')
+
+len = input.int(9, minval=1, title="Length", group = 'Stochastic', inline = 'stoch')
+smoothK = input.int(6, minval=1, title="SmoothK", group = 'Stochastic', inline = 'stoch')
+smoothD = input.int(5, minval=1, title="SmoothD", group = 'Stochastic', inline = 'stoch')
+upLine = input.int(40, minval=0, step=5, maxval=100, title="OB (shorts - above line)", group = 'Stochastic', inline = 'stoch')
+lowLine = input.int(60, minval=0, step=5, maxval=100, title="OS (longs - below line)", group = 'Stochastic', inline = 'stoch')
+
+resCustomStoch = input.timeframe(title="Stochastic Timeframe", defval="15", group = 'charts_res', inline = 'charts_resol')
+
+//Stoch formula
+k = ta.sma(ta.stoch(close, high, low, len), smoothK)
+d = ta.sma(k, smoothD)
+outK = request.security(syminfo.tickerid, resCustomStoch, k)
+outD = request.security(syminfo.tickerid, resCustomStoch, d)
+
+//definitions for Cross
+stochAboveLine = useStochasticAsFilter ? (outK > upLine and barstate.isconfirmed ? 1 : 0) : 1
+stochBelowLine = useStochasticAsFilter ? (outK < lowLine and barstate.isconfirmed ? 1 : 0) : 1
+
+
+
+
+
+useStochasticAsFilter2 = input.bool(defval=true, title="Use Stochastic 2nd?", group = 'Stochastic', inline = 'stoch2')
+
+len2 = input.int(12, minval=1, title="Length2", group = 'Stochastic', inline = 'stoch2')
+smoothK2 = input.int(10, minval=1, title="SmoothK2", group = 'Stochastic', inline = 'stoch2')
+smoothD2 = input.int(5, minval=1, title="SmoothD2", group = 'Stochastic', inline = 'stoch2')
+upLine2 = input.int(40, minval=0, step=5, maxval=100, title="OB (shorts - above line)2", group = 'Stochastic', inline = 'stoch2')
+lowLine2 = input.int(60, minval=0, step=5, maxval=100, title="OS (longs - below line)2", group = 'Stochastic', inline = 'stoch2')
+
+resCustomStoch2 = input.timeframe(title="Stochastic Timeframe 2nd", defval="15", group = 'charts_res', inline = 'charts_resol')
+
+//Stoch formula
+k2 = ta.sma(ta.stoch(close, high, low, len2), smoothK2)
+d2 = ta.sma(k2, smoothD2)
+outK2 = request.security(syminfo.tickerid, resCustomStoch2, k2)
+outD2 = request.security(syminfo.tickerid, resCustomStoch2, d2)
+
+//definitions for Cross
+stochAboveLine2 = useStochasticAsFilter2 ? (outK2 > upLine2 and barstate.isconfirmed ? 1 : 0) : 1
+stochBelowLine2 = useStochasticAsFilter2 ? (outK2 < lowLine2 and barstate.isconfirmed ? 1 : 0) : 1
+
+
+
+
+
+useStochasticAsFilter3 = input.bool(defval=true, title="Use Stochastic 3rd?", group = 'Stochastic', inline = 'stoch3')
+
+len3 = input.int(12, minval=1, title="Length3", group = 'Stochastic', inline = 'stoch3')
+smoothK3 = input.int(10, minval=1, title="SmoothK3", group = 'Stochastic', inline = 'stoch3')
+smoothD3 = input.int(5, minval=1, title="SmoothD3", group = 'Stochastic', inline = 'stoch3')
+upLine3 = input.int(40, minval=0, step=5, maxval=100, title="OB (shorts - above line)", group = 'Stochastic', inline = 'stoch3')
+lowLine3 = input.int(60, minval=0, step=5, maxval=100, title="OS (longs - below line)", group = 'Stochastic', inline = 'stoch3')
+
+resCustomStoch3 = input.timeframe(title="Stochastic Timeframe 3rd", defval="1", group = 'charts_res', inline = 'charts_resol')
+
+//Stoch formula
+k3 = ta.sma(ta.stoch(close, high, low, len3), smoothK3)
+d3 = ta.sma(k3, smoothD3)
+outK3 = request.security(syminfo.tickerid, resCustomStoch3, k3)
+outD3 = request.security(syminfo.tickerid, resCustomStoch3, d3)
+
+//definitions for Cross
+stochAboveLine3 = useStochasticAsFilter3 ? (outK3 > upLine3 and barstate.isconfirmed ? 1 : 0) : 1
+stochBelowLine3 = useStochasticAsFilter3 ? (outK3 < lowLine3 and barstate.isconfirmed ? 1 : 0) : 1
+
+
+
+
+
+
+smi_k = input.int(12, '%K', group = 'SMI', inline = 'smi')
+smi_d = input.int(5, '%D', group = 'SMI', inline = 'smi')
+smi_ob = input.int(40, 'OB', group = 'SMI', inline = 'smi')
+smi_os = input.int(-40, 'OS', group = 'SMI', inline = 'smi')
+// Range Calculation
+smi_ll = ta.lowest(low, smi_k)
+smi_hh = ta.highest(high, smi_k)
+smi_diff = smi_hh - smi_ll
+smi_rdiff = close - (smi_hh + smi_ll) / 2
+
+smi_avgrel = ta.ema(ta.ema(smi_rdiff, smi_d), smi_d)
+smi_avgdiff = ta.ema(ta.ema(smi_diff, smi_d), smi_d)
+// SMI calculations
+SMI = smi_avgdiff != 0 and barstate.isconfirmed ? smi_avgrel / (smi_avgdiff / 2) * 100 : 0
+SMIsignal = ta.ema(SMI, smi_d)
+emasignal = ta.ema(SMI, smi_k)
+
+smi_oversold = SMIsignal < smi_os
+
+smi_not_overbought = SMIsignal < smi_ob
+smi_not_oversold = SMIsignal > smi_os
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// Create Indicators
+slowSMA = ta.ema(close, sma_slow)
+medmEMA = ta.ema(close, ema_medm)
+fastEMA = ta.ema(close, ema_fast)
+bullishPinBar = close > open and open - low > pinbarConfirmationValue * (high - low) or close < open and close - low > pinbarConfirmationValue * (high - low) and barstate.isconfirmed
+bearishPinBar = close > open and high - close > pinbarConfirmationValue * (high - low) or close < open and high - close > pinbarConfirmationValue * (high - low) and barstate.isconfirmed
+
+// Specify Trend Conditions
+fanUpTrend = fastEMA > medmEMA and medmEMA < slowSMA and barstate.isconfirmed
+fanDnTrend = fastEMA < medmEMA and medmEMA < slowSMA and barstate.isconfirmed
+
+// Specify Piercing Conditions
+bullPierce = low < fastEMA and open > fastEMA and close > fastEMA or low < medmEMA and open > medmEMA and close > medmEMA or low < slowSMA and open > slowSMA and close > slowSMA and barstate.isconfirmed
+bearPierce = high > fastEMA and open < fastEMA and close < fastEMA or high > medmEMA and open < medmEMA and close < medmEMA or high > slowSMA and open < slowSMA and close < slowSMA and barstate.isconfirmed
+
+// Specify Entry Conditions
+longEntry = fanUpTrend and bullishPinBar and bullPierce and barstate.isconfirmed
+shortEntry = fanDnTrend and bearishPinBar and bearPierce and barstate.isconfirmed
+
+pineconnectorLicenseID = input.string(title='Pineconnector ID', defval='12345', group='Pineconnector Alert Settings', inline = 'pineconnectecor')
+pineconnectorInputSymbol = input.string(title='Symbol (MT4/MT5)', defval='EURUSD.i', group='Pineconnector Alert Settings', inline = 'pineconnectecor')
+pineconnectorVolume = input.float(0.4, 'lots size', minval=0.0, step=0.1, group='Pineconnector Alert Settings', inline = 'pineconnectecor')
+
+
+
+strTicksToPips(ticks) =>
+    str.tostring(ticks * syminfo.mintick)
+
+// alert(pineconnectorLicenseID + ',buy,' + pineconnectorInputSymbol + ',sl=' + str.tostring(slHardPoints / 10) + ',tp=' + str.tostring(slHardPoints * 1.5 / 10) + ',risk=' + str.tostring(pineconnectorVolume) + ',trailtrig=' + str.tostring(slHardPoints / 10))
+
+
+// alert(licenseID + ',buy,' + inputSymbol + ',sl=' + str.tostring(StopLoss) + ',tp=' + str.tostring(TakeProfit) + ',risk=' + str.tostring(Volume))
+pineconnectorAlert(direction) =>
+     pineconnectorLicenseID +
+     ',' + direction +
+     ',' + pineconnectorInputSymbol +
+     ',sl=' + str.tostring(slHardPoints / 10) +
+     ',tp=' + str.tostring(slHardPoints * 2 / 10) +
+     ',risk=' + str.tostring(pineconnectorVolume) +
+     ',trailtrig=' + str.tostring(slPoints / 10)
+
+//  ',betrigger=' + strTicksToPips(slPoints)
+
+isLong() => strategy.position_size > 0
+isShort() => strategy.position_size < 0
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+src = hlc3
+al = input.int(8, title='al', group = 'exit', inline = 'exit')
+vl = input.int(13, title='vl', group = 'exit', inline = 'exit')
+df = input.float(2.9, title = 'df', group = 'exit', inline = 'exit')
+lba = input.float(0.9, title = 'lba', group = 'exit', inline = 'exit')
+typical = src >= src[1] ? src - low[1] : src[1] - low
+deviation = df * ta.sma(typical, vl)
+devHigh = ta.ema(deviation, al)
+devLow = lba * devHigh
+medianAvg = ta.ema(src, al)
+MidLine = ta.sma(medianAvg, al)
+UpperBand = ta.ema(medianAvg, al) + devHigh
+LowerBand = ta.ema(medianAvg, al) - devLow
+
+//Leledc from insilico
+exhaustionSwitch = true
+levelSwitch = true
+length = input.int(40, title = 'leledc length', group = 'exit', inline = 'exit')
+bars = input.int(10, title = 'leledc bars', group = 'exit', inline = 'exit')
+thicknesSwitch = input.int(2, title = 'leledc thicknesSwitch', group = 'exit', inline = 'exit')
+Lelec(bars, len) =>
+    bindex = int(na)
+    bindex := nz(bindex[1], 0)
+    sindex = int(na)
+    sindex := nz(sindex[1], 0)
+    return_1 = 0
+    bindex := close > close[4] ? bindex + 1 : bindex
+    sindex := close < close[4] ? sindex + 1 : sindex
+    if bindex > bars and close < open and high >= ta.highest(high, len)
+        bindex := 0
+        return_1 := -1
+        return_1
+    else
+        if sindex > bars and close > open and low <= ta.lowest(low, len)
+            sindex := 0
+            return_1 := 1
+            return_1
+Lelex = Lelec(bars, length)
+highlel = Lelex == -1 ? high : na
+lowlel = Lelex == 1 ? low : na
+resistance = float(na)
+support = float(na)
+resistance := close < open and Lelex ? high : resistance[1]
+support := close > open and Lelex ? low : support[1]
+
+//rsi
+rsiLength = input.int(14, title = 'rsi length', inline = 'exit')
+rsi = ta.rsi(close, rsiLength)
+
+//volume
+hvpValue = input.int(12, title = 'HVP', inline = 'exit')
+HVP = ta.vwma(ta.vwap, hvpValue)
+lvpValue = input.int(3, title = 'LVP', inline = 'exit')
+LVP = ta.vwma(ta.vwap, lvpValue)
+MR1 = input.float(1.0000, step = 0.0001, title='1min TF tops', inline = 'exit')
+MR2 = input.float(1.0000, step = 0.0001, title='1min TF bottoms', inline = 'exit')
+
+//barcolor
+rsiOverBoughtLevel = input.int(55, title = 'RSI OB Level', inline = 'exit')
+rsiOverSoldLevel = input.int(45, title = 'RSI OS Level', inline = 'exit')
+// bcolor = high >= UpperBand and LVP >= HVP * MR1 and rsi >= rsiOverBoughtLevel and high >= resistance and barstate.isconfirmed ? color.yellow : low <= LowerBand and HVP >= LVP * MR2 and rsi <= 45 and low <= support ? color.white : na
+// barcolor(bcolor)
+
+//alerts
+hot = high >= UpperBand and LVP >= HVP * MR1 and rsi >= rsiOverBoughtLevel and high >= resistance and barstate.isconfirmed
+cold = low <= LowerBand and HVP >= LVP * MR2 and rsi <= rsiOverSoldLevel and low <= support and barstate.isconfirmed
+
+
+//extra plotted indicators
+plotchar(hot, 'hot', '▼', location.abovebar, color.new(color.red, 0), size=size.tiny)
+plotchar(cold, 'hot', '▲', location.belowbar, color.new(color.green, 0), size=size.tiny)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+// GREEDZONE PART
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+
+greedZoneSource = input.source(ohlc4, title='GreedZone Source', group='Greed Zone (SHORT)')
+greedZonelowPeriod = input.int(40, title='Low Period',  group='Greed Zone (SHORT)')
+greedZoneStdevPeriod = input.int(100, title='Stdev Period',  group='Greed Zone (SHORT)')
+greedZoneUseWMA = input.bool(false, title='Use WMA instead of SMA?',  group='Greed Zone (SHORT)')
+
+// Condition One
+greedZoneFZ1 = (ta.lowest(greedZoneSource, greedZonelowPeriod) - greedZoneSource) / ta.lowest(greedZoneSource, greedZonelowPeriod)
+greedZoneAVG1 = ta.sma(greedZoneFZ1, greedZoneStdevPeriod)
+
+if greedZoneUseWMA
+    greedZoneAVG1 := ta.wma(greedZoneFZ1, greedZoneStdevPeriod)
+    greedZoneAVG1
+
+greedZoneSTDEV1 = ta.stdev(greedZoneFZ1, greedZoneStdevPeriod)
+greedZoneFZ1Limit = greedZoneAVG1 - greedZoneSTDEV1
+
+// Condition Two
+greedZoneFZ2 = ta.sma(greedZoneSource, greedZonelowPeriod)
+greedZoneAVG2 = ta.sma(greedZoneFZ2, greedZoneStdevPeriod)
+
+if greedZoneUseWMA
+    greedZoneFZ2 := ta.wma(greedZoneSource, greedZonelowPeriod)
+    greedZoneAVG2 := ta.wma(greedZoneFZ2, greedZoneStdevPeriod)
+    greedZoneAVG2
+
+greedZoneSTDEV2 = ta.stdev(greedZoneFZ2, greedZoneStdevPeriod)
+greedZoneFZ2Limit = greedZoneAVG2 + greedZoneSTDEV2
+
+// Draw something
+greedZoneCondition = greedZoneFZ1 < greedZoneFZ1Limit and greedZoneFZ2 > greedZoneFZ2Limit and barstate.isconfirmed
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+// FEARZONE PART
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+
+fearZoneSource = input.source(ohlc4, title='FearZone Source', group='Fear Zone (LONGS)')
+fearZoneHighPeriod = input.int(40, title='High Period',  group='Fear Zone (LONGS)')
+fearZoneStdevPeriod = input.int(100, title='Stdev Period',  group='Fear Zone (LONGS)')
+fearZoneUseWMA = input.bool(false, title='Use WMA instead of SMA?',  group='Fear Zone (LONGS)')
+fearZoneUseDrawOnChart = input.bool(true, title='Draw on chart?', group='Fear Zone (LONGS)')
+
+// Condition One 
+fearZoneFZ1 = (ta.highest(fearZoneSource, fearZoneHighPeriod) - fearZoneSource) / ta.highest(fearZoneSource, fearZoneHighPeriod)
+fearZoneAVG1 = ta.sma(fearZoneFZ1, fearZoneStdevPeriod)
+
+if fearZoneUseWMA 
+    fearZoneAVG1 := ta.wma(fearZoneFZ1, fearZoneStdevPeriod)
+
+fearZoneSTDEV1 = ta.stdev(fearZoneFZ1, fearZoneStdevPeriod)
+fearZoneFZ1Limit = fearZoneAVG1 + fearZoneSTDEV1
+
+// Condition Two
+fearZoneFZ2 = ta.sma(fearZoneSource, fearZoneHighPeriod)
+fearZoneAVG2 = ta.sma(fearZoneFZ2, fearZoneStdevPeriod)
+
+if fearZoneUseWMA 
+    fearZoneFZ2 := ta.wma(fearZoneSource, fearZoneHighPeriod)
+    fearZoneAVG2 := ta.wma(fearZoneFZ2, fearZoneStdevPeriod)
+    
+fearZoneSTDEV2 = ta.stdev(fearZoneFZ2, fearZoneStdevPeriod)
+fearZoneFZ2Limit = fearZoneAVG2 - fearZoneSTDEV2
+
+// FearZone
+fearZoneCondition = fearZoneFZ1 > fearZoneFZ1Limit and fearZoneFZ2 < fearZoneFZ2Limit and barstate.isconfirmed
+
+
+useAdditionalEarlyExit = input.bool(true, 'Use additional FEAR/GREED EXPO exit?', group="double_exit")
+
+plotchar(useAdditionalEarlyExit and fearZoneCondition ? low : na, char='•', location=location.absolute, color=color.lime, size=size.large)
+plotchar(useAdditionalEarlyExit and greedZoneCondition ? high : na, char='•', location=location.absolute, color=color.red, size=size.large)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+////////////////////////////////////////////////////////////////////////////////////////
+//// EXIT LOGIC
+////////////////////////////////////////////////////////////////////////////////////////
+
+useEarlyExit = input.bool(true, 'Use early exit?')
+
+// longEarlyExit = isLong() and useEarlyExit and leledcMajorShort
+// shortEarlyExit = isShort() and useEarlyExit and leledcMajorLong
+
+
+longEarlyExit = isLong() and ((useEarlyExit and hot) or (useAdditionalEarlyExit ? greedZoneCondition : false))
+shortEarlyExit = isShort() and ((useEarlyExit and cold) or (useAdditionalEarlyExit ? fearZoneCondition : false))
+
+
+
+
+
+
+
+
+
+
+// Execute Long Entry
+if longEntry and not isLong() and not isShort() and stochBelowLine and stochBelowLine2 and stochBelowLine3 and smi_not_overbought and barstate.isconfirmed
+    // alert(pineconnectorAlert('buy'))
+    // alert('buy!')
+    // alert(pineconnectorAlert('buy'))
+    // alert(pineconnectorLicenseID + ',buy,' + pineconnectorInputSymbol + ',sl=' + str.tostring(slHardPoints / 10) + ',tp=' + str.tostring(slPoints / 10) + ',risk=' + str.tostring(pineconnectorVolume) + ',trailtrig=' + str.tostring(slHardPoints / 10))
+
+    strategy.entry('long', strategy.long)
+    strategy.exit('exit long', from_entry='long', loss=slHardPoints, trail_points=slPoints)
+
+
+if shortEntry and not isLong() and not isShort() and stochAboveLine and stochAboveLine2 and stochAboveLine3 and smi_not_oversold and barstate.isconfirmed
+    strategy.entry('short', strategy.short)
+    strategy.exit('exit short', from_entry='short', loss=slHardPoints, trail_points=slPoints)
+
+
+if longEarlyExit
+    strategy.close_all()
+if shortEarlyExit
+    strategy.close_all()
+
+
+bgcolor(longEntry and plot_entries ? color.blue : na)
+bgcolor(shortEntry and plot_entries ? color.red : na)
