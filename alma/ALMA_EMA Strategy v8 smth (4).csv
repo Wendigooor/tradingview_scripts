@@ -1,0 +1,46 @@
+Name,Value
+"__indicatorName","ALMA/EMA Strategy v8 smth"
+"Pineconnector ID",6388198605013
+"Symbol (MT4/MT5)","EURUSD"
+"Lots size",0.2
+"Source","close"
+"Period",156
+"Offset",0.425
+"Sigma",6
+"-----------CHEATC0DE1------------",false
+"Slow Ema Length",12
+"Fast Ema Length",6
+"SMA length",260
+"Take Profit",0.25
+"Stop Loss",0.12
+"K",6
+"D",10
+"RSI Length",12
+"Stochastic Length",2
+"RSI Source","close"
+"Close long crossunder",82
+"Close short crossover",18
+"Al",2
+"Vl",10
+"Df",0.9
+"Lba",0.8
+"Leledc length",20
+"Leledc bars",8
+"Leledc thicknesSwitch",2
+"Rsi length",14
+"HVP",12
+"LVP",3
+"1min TF tops",1
+"1min TF bottoms",0.9998
+"RSI OB Level",35
+"RSI OS Level",75
+"GreedZone Source1","ohlc4"
+"Low Period1",40
+"Stdev Period1",80
+"Use WMA instead of SMA?1",true
+"FearZone Source2","ohlc4"
+"High Period2",30
+"Stdev Period2",80
+"Use WMA instead of SMA?2",true
+"Draw on chart?2",true
+"Use additional FEAR/GREED EXPO exit?3",true
