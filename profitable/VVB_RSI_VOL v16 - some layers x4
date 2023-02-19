@@ -1,0 +1,884 @@
+//@version=5
+strategy('VVB_RSI_VOL v16 - some layers x4',
+     default_qty_value=10000,
+     initial_capital=1000, 
+     currency=currency.USD, 
+     calc_on_every_tick=true,
+     overlay=true,
+     max_labels_count=500)
+
+
+
+
+
+pineconnectorLicenseID = input.string(title='Pineconnector ID', defval='12345', group='Pineconnector Alert Settings', inline = 'pineconnectecor')
+pineconnectorInputSymbol = input.string(title='Symbol (MT4/MT5)', defval='EURUSD', group='Pineconnector Alert Settings', inline = 'pineconnectecor')
+pineconnectorVolume = input.float(0.1, 'lots size', minval=0.0, step=0.1, group='Pineconnector Alert Settings', inline = 'pineconnectecor')
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// https://www.tradingview.com/script/5Z5K1eVP-Sidders-Std-Deviation-from-Mean-MA-Z-score/
+
+deviation_lookback_period = input.int(33, title='Lookback period', group='Deviation', inline = 'deviation')
+deviation_source = input.source(close, title='Data source', group='Deviation', inline = 'deviation')
+deviation_typeMA1 = input.string('EMA', 'MA Type', options=['EMA', 'HMA', 'SMA', 'RMA', 'WMA'], group='Deviation', inline = 'deviation')
+
+deviation_extreme_treshold_pos = input.float(2.4, title='Define extreme Std. Dev. threshold (SHORTS)', step=0.1, group='Deviation', inline = 'deviation')
+deviation_extreme_treshold_neg = input.float(2.4, title='Define extreme Std. Dev. threshold (LONGS)', step=0.1, group='Deviation', inline = 'deviation') * -1
+// extreme_treshold_neg = -extreme_treshold_pos
+
+//Z SCORE - MEAN
+// basis_calc = ta.sma(Source, Lookback_period)
+deviation_basis_calc = deviation_typeMA1 == 'EMA' ? ta.ema(deviation_source, deviation_lookback_period) : deviation_typeMA1 == 'SMA' ? ta.sma(deviation_source, deviation_lookback_period) : deviation_typeMA1 == 'RMA' ? ta.rma(deviation_source, deviation_lookback_period) : deviation_typeMA1 == 'HMA' ? ta.hma(deviation_source, deviation_lookback_period) : ta.wma(deviation_source, deviation_lookback_period)
+deviation_zscore_Mean = (deviation_source - deviation_basis_calc) / ta.stdev(deviation_source, deviation_lookback_period)
+
+//Z SCORE - MOVING AVERAGE
+deviation_zscore_MA = deviation_typeMA1 == 'EMA' ? ta.ema(deviation_zscore_Mean, deviation_lookback_period) : deviation_typeMA1 == 'SMA' ? ta.sma(deviation_zscore_Mean, deviation_lookback_period) : deviation_typeMA1 == 'RMA' ? ta.rma(deviation_zscore_Mean, deviation_lookback_period) : deviation_typeMA1 == 'HMA' ? ta.hma(deviation_zscore_Mean, deviation_lookback_period) : ta.wma(deviation_zscore_Mean, deviation_lookback_period)
+
+deviation_crossover_pos = ta.crossover(deviation_zscore_Mean, deviation_extreme_treshold_neg) and barstate.isconfirmed
+deviation_crossover_neg = ta.crossunder(deviation_zscore_Mean, deviation_extreme_treshold_pos) and barstate.isconfirmed
+
+// deviation_zscore_extreme = deviation_zscore_Mean > deviation_extreme_treshold_pos ? color.orange : zscore_Mean < extreme_treshold_neg ? color.rgb(129, 225, 179, 25) : na
+// bgcolor(zscore_extreme, title='Above/below extreme treshold')
+
+//------------------------------------------------------------------------------
+//ALERTS
+//------------------------------------------------------------------------------
+// alertcondition(zscore_Mean > extreme_treshold_pos, title='Short?')
+// alertcondition(zscore_Mean < extreme_treshold_neg, title='Long?')
+
+deviation_shorts_allowed = deviation_zscore_Mean >= deviation_extreme_treshold_pos and barstate.isconfirmed
+deviation_longs_allowed = deviation_zscore_Mean <= deviation_extreme_treshold_neg and barstate.isconfirmed
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// https://www.tradingview.com/script/o8p5hAxr-Durbin-Watson-Test-Statistic-pig/
+
+dwt_src = input(close, '===== dwt Source =====')
+dwt_len = input.int(30, 'dwt Lookback', minval=6, step=2)
+
+//Linear Regression: Runs an Regression on barindex and log returns
+dwt_y = math.log(dwt_src / dwt_src[1])  //Log returns
+dwt_x = bar_index
+dwt_sumy = math.sum(dwt_y, dwt_len)
+dwt_sumx = math.sum(dwt_x, dwt_len)
+dwt_sumxy = math.sum(dwt_x * dwt_y, dwt_len)
+dwt_sumx2 = math.sum(math.pow(dwt_x, 2), dwt_len)
+dwt_sumy2 = math.sum(math.pow(dwt_y, 2), dwt_len)
+
+//slope
+dwt_B = (dwt_len * dwt_sumxy - dwt_sumx * dwt_sumy) / (dwt_len * dwt_sumx2 - math.pow(dwt_sumx, 2))
+
+//Intercept
+dwt_a = (dwt_sumy - dwt_B * dwt_sumx) / dwt_len
+
+//Linear Regression Function
+dwt_Y = dwt_B * dwt_x + dwt_a
+
+//Residual Function: Substract the prediction result generated from linear regression from the data
+dwt_f(n) =>
+    dwt_y[n] - (dwt_B * (dwt_x - n) + dwt_a)
+
+//Sum of squared of the first difference error terms
+dwt_d = array.new_float(0)
+for i = 0 to dwt_len - 2 by 1
+    array.push(dwt_d, math.pow(dwt_f(i + 1) - dwt_f(i), 2))
+
+dwt_sumd = array.sum(dwt_d)
+
+//Sum of squared of all error terms
+dwt_e = array.new_float(0)
+for i = 0 to dwt_len - 1 by 1
+    array.push(dwt_e, math.pow(dwt_f(i), 2))
+
+dwt_sume = array.sum(dwt_e)
+
+//Durbin Watson Stats, Value between 0 and 4. 
+dwt_dw = dwt_sumd / dwt_sume
+
+//Significance level based on N of observation. 0.05 significance Durbin Watson Table below
+//Between Lower and Upper Threshold means no significant first order autocorrelation, outside threshold means significant first order autocorrelation
+dwt_l = 0.0
+if dwt_len == 6
+    dwt_l := 0.61
+    dwt_l
+if dwt_len == 7
+    dwt_l := 0.70
+    dwt_l
+if dwt_len == 8
+    dwt_l := 0.76
+    dwt_l
+if dwt_len == 9
+    dwt_l := 0.82
+    dwt_l
+if dwt_len == 10
+    dwt_l := 0.88
+    dwt_l
+if dwt_len == 11
+    dwt_l := 0.93
+    dwt_l
+if dwt_len == 12
+    dwt_l := 0.97
+    dwt_l
+if dwt_len == 13
+    dwt_l := 1.01
+    dwt_l
+if dwt_len == 14
+    dwt_l := 1.05
+    dwt_l
+if dwt_len == 15
+    dwt_l := 1.08
+    dwt_l
+if dwt_len == 16
+    dwt_l := 1.10
+    dwt_l
+if dwt_len == 17
+    dwt_l := 1.13
+    dwt_l
+if dwt_len == 18
+    dwt_l := 1.16
+    dwt_l
+if dwt_len == 19
+    dwt_l := 1.18
+    dwt_l
+if dwt_len == 20
+    dwt_l := 1.20
+    dwt_l
+if dwt_len == 21
+    dwt_l := 1.22
+    dwt_l
+if dwt_len == 22
+    dwt_l := 1.24
+    dwt_l
+if dwt_len == 23
+    dwt_l := 1.26
+    dwt_l
+if dwt_len == 24
+    dwt_l := 1.27
+    dwt_l
+if dwt_len == 25
+    dwt_l := 1.29
+    dwt_l
+if dwt_len == 26
+    dwt_l := 1.30
+    dwt_l
+if dwt_len == 27
+    dwt_l := 1.32
+    dwt_l
+if dwt_len == 28
+    dwt_l := 1.33
+    dwt_l
+if dwt_len == 29
+    dwt_l := 1.34
+    dwt_l
+if dwt_len == 30
+    dwt_l := 1.35
+    dwt_l
+if dwt_len == 31
+    dwt_l := 1.36
+    dwt_l
+if dwt_len == 32
+    dwt_l := 1.37
+    dwt_l
+if dwt_len == 33
+    dwt_l := 1.38
+    dwt_l
+if dwt_len == 34
+    dwt_l := 1.39
+    dwt_l
+if dwt_len == 35
+    dwt_l := 1.40
+    dwt_l
+if dwt_len == 36
+    dwt_l := 1.41
+    dwt_l
+if dwt_len == 37
+    dwt_l := 1.42
+    dwt_l
+if dwt_len == 38
+    dwt_l := 1.43
+    dwt_l
+if dwt_len == 39
+    dwt_l := 1.43
+    dwt_l
+if dwt_len == 40
+    dwt_l := 1.44
+    dwt_l
+if dwt_len > 40 and dwt_len <= 45
+    dwt_l := 1.48
+    dwt_l
+if dwt_len > 45 and dwt_len <= 50
+    dwt_l := 1.50
+    dwt_l
+if dwt_len > 50 and dwt_len <= 55
+    dwt_l := 1.53
+    dwt_l
+if dwt_len > 55 and dwt_len <= 60
+    dwt_l := 1.55
+    dwt_l
+if dwt_len > 60 and dwt_len <= 65
+    dwt_l := 1.57
+    dwt_l
+if dwt_len > 65 and dwt_len <= 70
+    dwt_l := 1.58
+    dwt_l
+if dwt_len > 70 and dwt_len <= 75
+    dwt_l := 1.60
+    dwt_l
+if dwt_len > 75 and dwt_len <= 80
+    dwt_l := 1.61
+    dwt_l
+if dwt_len > 80 and dwt_len <= 85
+    dwt_l := 1.62
+    dwt_l
+if dwt_len > 85 and dwt_len <= 90
+    dwt_l := 1.63
+    dwt_l
+if dwt_len > 90 and dwt_len <= 95
+    dwt_l := 1.64
+    dwt_l
+if dwt_len > 95 and dwt_len <= 100
+    dwt_l := 1.65
+    dwt_l
+if dwt_len > 100 and dwt_len <= 150
+    dwt_l := 1.72
+    dwt_l
+if dwt_len > 150 and dwt_len <= 200
+    dwt_l := 1.76
+    dwt_l
+if dwt_len > 200 and dwt_len <= 250
+    dwt_l := 1.79
+    dwt_l
+if dwt_len > 250 and dwt_len <= 300
+    dwt_l := 1.80
+    dwt_l
+if dwt_len > 300
+    dwt_l := 1.82
+    dwt_l
+
+//Upper Threshold eqauls to 4 - lower threshold due to symmetry
+dwt_ut = 4 - dwt_l
+
+dwt_longs_allowed = dwt_dw < 1.98 and barstate.isconfirmed
+dwt_shorts_allowed = dwt_dw > 2.02 and barstate.isconfirmed
+
+
+
+
+
+
+
+
+// https://www.tradingview.com/script/NioHIxY1-Logistic-RSI-STOCH-ROC-AO-by-DGT/
+
+log_dgt_ti = input.string('Logistic Dominance', 'Select Indicator', options=['Awesome Oscillator (AO)', 'Logistic Dominance', 'Rate of Change (ROC)', 'Relative Strength Index (RSI)', 'Stochastic (STOCH)'])
+log_dgt_source = input.source(close, 'Source LOGISTIC', inline='LOG', group='Logistic Settings')
+log_dgt_length = input.int(13, 'Logistic Map Length', minval=1, inline='LOG', group='Logistic Settings')
+
+log_dgt_lenLD = input.int(5, 'Length : Logistic Dominance', minval=1, group='Optimization / Customization Metrics')
+log_dgt_lenROC = 9 // input.int(9, 'Length : Rate of Change (ROC)', minval=1, group='Optimization / Customization Metrics')
+log_dgt_lenRSI = 14 // input.int(14, 'Length : Relative Strength Index (RSI)', minval=1, group='Optimization / Customization Metrics')
+log_dgt_lenSTO = 14 // input.int(14, 'Length : Stochastic (STOCH)', minval=1, group='Optimization / Customization Metrics')
+
+// -Calculations ════════════════════════════════════════════════════════════════════════════════ //
+
+f_logmap(_s, _r, _l) =>
+    _r * _s / ta.highest(_l) * (1 - _s / ta.highest(_l))
+
+f_map(_s, _r, _v) =>
+    mapeq = f_logmap(_s, _r, log_dgt_length)
+    lmap = mapeq
+    for i = 0 to 29 by 1
+        array.push(_v, lmap)
+        lmap := _r * math.abs(mapeq[i]) * (1 - mapeq[i])
+        lmap
+    lmap
+
+log_dgt_r = if log_dgt_ti == 'Awesome Oscillator (AO)'
+    ta.sma(hl2, 5) / ta.sma(hl2, 34) - 1
+else if log_dgt_ti == 'Logistic Dominance'
+    -f_logmap(-log_dgt_source, ta.change(log_dgt_source, log_dgt_lenLD) / log_dgt_source[log_dgt_lenLD], log_dgt_lenLD) - f_logmap(log_dgt_source, ta.change(log_dgt_source, log_dgt_lenLD) / log_dgt_source[log_dgt_lenLD], log_dgt_lenLD)
+else if log_dgt_ti == 'Rate of Change (ROC)'
+    ta.change(log_dgt_source, log_dgt_lenROC) / log_dgt_source[log_dgt_lenROC]
+else if log_dgt_ti == 'Relative Strength Index (RSI)'
+    ta.rsi(log_dgt_source, log_dgt_lenRSI) / 100 - .5
+else if log_dgt_ti == 'Stochastic (STOCH)'
+    ta.stoch(log_dgt_source, high, low, log_dgt_lenSTO) / 100 - .5
+
+var log_dgt_v = array.new_float(0)
+
+log_dgt_val = f_map(log_dgt_source, log_dgt_r, log_dgt_v)
+
+log_dgt_aStDev_multiplier = input.int(100000 * 100000, 'log_dgt_aStDev multiplier (EURUSD)')
+
+array.remove(log_dgt_v, 0)
+log_dgt_aStDev = math.sign(array.avg(log_dgt_v)) * array.stdev(log_dgt_v) * log_dgt_aStDev_multiplier
+// plot(log_dgt_aStDev, 'Standard Deviation of Array\'s Elements', array.avg(log_dgt_v) >= 0 ? #006400 : #910000, 2)
+array.clear(log_dgt_v)
+
+log_dgt_long_max = input.float(5, 'Logistic filter max for longs')
+log_dgt_short_min = input.float(-5, 'Logistic filter min for shorts')
+
+log_dgt_trade_allowed = log_dgt_aStDev <= log_dgt_long_max and log_dgt_aStDev >= log_dgt_short_min and barstate.isconfirmed
+
+// log_dgt_cross_limits = ta.cross(log_dgt_aStDev, log_dgt_long_max) or ta.cross(log_dgt_aStDev, log_dgt_short_min)
+
+log_dgt_cross_upper = ta.cross(log_dgt_aStDev, log_dgt_long_max) and barstate.isconfirmed
+log_dgt_cross_down = ta.cross(log_dgt_aStDev, log_dgt_short_min) and barstate.isconfirmed
+
+
+
+
+
+
+// // SMI
+
+// smi_len = input.int(9, minval=1, title="Length", group = 'Stochastic', inline = 'stoch')
+// smi_smoothK = input.int(6, minval=1, title="SmoothK", group = 'Stochastic', inline = 'stoch')
+// smi_smoothD = input.int(5, minval=1, title="SmoothD", group = 'Stochastic', inline = 'stoch')
+// smi_upLine = input.int(40, minval=0, step=5, maxval=100, title="OB (shorts - above line)", group = 'Stochastic', inline = 'stoch')
+// smi_lowLine = input.int(60, minval=0, step=5, maxval=100, title="OS (longs - below line)", group = 'Stochastic', inline = 'stoch')
+
+// smi_resCustomStoch = input.timeframe(title="Stochastic Timeframe", defval="15", group = 'charts_res', inline = 'charts_resol')
+
+// //Stoch formula
+// smi_k = ta.sma(ta.stoch(close, high, low, smi_len), smi_smoothK)
+// smi_d = ta.sma(smi_k, smi_smoothD)
+// smi_outK = request.security(syminfo.tickerid, smi_resCustomStoch, smi_k)
+// smi_outD = request.security(syminfo.tickerid, smi_resCustomStoch, smi_d)
+
+// //definitions for Cross
+// smi_stochAboveLine = smi_outK > smi_upLine and barstate.isconfirmed
+// smi_stochBelowLine = smi_outK < smi_lowLine and barstate.isconfirmed
+
+
+// smi_filter_bars = input.int(30, 'N bars since last oversold/overbought SMI')
+// bars_since_smi_overbought = ta.barssince(smi_stochAboveLine)
+// bars_since_smi_oversold = ta.barssince(smi_stochBelowLine)
+
+// smi_longs_allowed = bars_since_smi_overbought <= smi_filter_bars
+// smi_shorts_allowed = bars_since_smi_oversold <= smi_filter_bars
+
+
+
+
+// https://www.tradingview.com/script/UUG0lf8u-Breakout-Consolidation-Filter-jwammo12/
+
+ATRMultiple = input.float(3.0, title='ATRMultiple', group='breakout/consolidation', inline = 'breakout/consolidation')
+BreakoutLength = input.int(6, title="BreakoutLength", group='breakout/consolidation', inline = 'breakout/consolidation')
+Lookback = input.int(7, title='lookback', group='breakout/consolidation', inline = 'breakout/consolidation')
+ATRPeriod = input(14, title='atr_period', group='breakout/consolidation', inline = 'breakout/consolidation')
+trueRange = ta.atr(ATRPeriod)
+use_breakout_exit = input.bool(false, title='Use breakout exit?')
+
+xColor = color.yellow
+for i = Lookback to 0 by 1
+    if close[i] - open[i + BreakoutLength] > trueRange[i] * ATRMultiple and barstate.isconfirmed
+        xColor := color.green
+        xColor
+    if open[i + BreakoutLength] - close[i] > trueRange[i] * ATRMultiple and barstate.isconfirmed
+        xColor := color.red
+        xColor
+trueRangePR = ta.percentrank(trueRange, 100)
+
+breakout_long_exit = xColor[1] == color.green
+breakout_short_exit = xColor[1] == color.red
+
+
+
+
+
+
+
+
+
+
+
+
+// https://www.tradingview.com/script/sDPe1PDd-Vervoort-Smoothed-b-LazyBear/
+
+vvbb_calc_tema(s, length) =>
+    ema1 = ta.ema(s, length)
+    ema2 = ta.ema(ema1, length)
+    ema3 = ta.ema(ema2, length)
+    3 * (ema1 - ema2) + ema3
+
+vvbb_length = input.int(18, minval=2, maxval=100, title='vvbb %B Length', group = 'VVBB', inline = 'vvbb')
+vvbb_temaLength = input.int(8, title='TEMA Length', group = 'VVBB', inline = 'vvbb')
+vvbb_stdevHigh = input.float(1.4, title='vvbb Stdev High', group = 'VVBB', inline = 'vvbb', step = 0.1)
+vvbb_stdevLow = input.float(1.4, title='vvbb Stdev Low', group = 'VVBB', inline = 'vvbb', step = 0.1)
+vvbb_stdevLength = input.int(44, title='vvbb Stdev Length', group = 'VVBB', inline = 'vvbb')
+
+vvbb_openHA = request.security(ticker.heikinashi(syminfo.tickerid), timeframe.period, open)
+vvbb_haOpen = (ohlc4[1] + nz(vvbb_openHA[1])) / 2
+vvbb_haC = (ohlc4 + vvbb_haOpen + math.max(high, vvbb_haOpen) + math.min(low, vvbb_haOpen)) / 4
+
+vvbb_tma1 = vvbb_calc_tema(vvbb_haC, vvbb_temaLength)
+vvbb_tma2 = vvbb_calc_tema(vvbb_tma1, vvbb_temaLength)
+vvbb_diff = vvbb_tma1 - vvbb_tma2
+vvbb_zlha = vvbb_tma1 + vvbb_diff
+vvbb_percb = (vvbb_calc_tema(vvbb_zlha, vvbb_temaLength) + 2 * ta.stdev(vvbb_calc_tema(vvbb_zlha, vvbb_temaLength), vvbb_length) - ta.wma(vvbb_calc_tema(vvbb_zlha, vvbb_temaLength), vvbb_length)) / (4 * ta.stdev(vvbb_calc_tema(vvbb_zlha, vvbb_temaLength), vvbb_length)) * 100
+
+// plot(percb, linewidth=2, color=color.new(color.maroon, 0), title='SVE %b')
+// vvbb_longs_allowed = vvbb_percb <= vvbb_longs_limit and barstate.isconfirmed
+// vvbb_shorts_allowed = vvbb_percb >= vvbb_short_limit and barstate.isconfirmed
+
+vvbb_ub = 50 + vvbb_stdevHigh * ta.stdev(vvbb_percb, vvbb_stdevLength)
+vvbb_lb = 50 - vvbb_stdevLow * ta.stdev(vvbb_percb, vvbb_stdevLength)
+
+vvbb_longs_allowed = vvbb_percb <= vvbb_lb and barstate.isconfirmed
+vvbb_shorts_allowed = vvbb_percb >= vvbb_ub and barstate.isconfirmed
+
+
+
+
+
+
+src = hlc3
+al = input.int(8, title='al')
+vl = input.int(13, title='vl')
+df = input.float(3, title = 'df', step = 0.1)
+lba = input.float(0.9, title = 'lba', step = 0.05)
+typical = src >= src[1] ? src - low[1] : src[1] - low
+deviation = df * ta.sma(typical, vl)
+devHigh = ta.ema(deviation, al)
+devLow = lba * devHigh
+medianAvg = ta.ema(src, al)
+MidLine = ta.sma(medianAvg, al)
+UpperBand = ta.ema(medianAvg, al) + devHigh
+LowerBand = ta.ema(medianAvg, al) - devLow
+
+//Leledc from insilico
+exhaustionSwitch = true
+levelSwitch = true
+length = input.int(40, title = 'leledc length')
+bars = input.int(10, title = 'leledc bars')
+Lelec(bars, len) =>
+    bindex = int(na)
+    bindex := nz(bindex[1], 0)
+    sindex = int(na)
+    sindex := nz(sindex[1], 0)
+    return_1 = 0
+    bindex := close > close[4] ? bindex + 1 : bindex
+    sindex := close < close[4] ? sindex + 1 : sindex
+    if bindex > bars and close < open and high >= ta.highest(high, len)
+        bindex := 0
+        return_1 := -1
+        return_1
+    else
+        if sindex > bars and close > open and low <= ta.lowest(low, len)
+            sindex := 0
+            return_1 := 1
+            return_1
+Lelex = Lelec(bars, length)
+highlel = Lelex == -1 ? high : na
+lowlel = Lelex == 1 ? low : na
+resistance = float(na)
+support = float(na)
+resistance := close < open and Lelex ? high : resistance[1]
+support := close > open and Lelex ? low : support[1]
+
+//volume
+hvpValue = input.int(13, title = 'HVP')
+HVP = ta.vwma(ta.vwap, hvpValue)
+lvpValue = input.int(3, title = 'LVP')
+LVP = ta.vwma(ta.vwap, lvpValue)
+MR1 = input.float(1.000, step = 0.00001, title='1min TF tops (lil higher for higher TFs / lil lower for lower TFs)')
+MR2 = input.float(1.000, step = 0.00001, title='1min TF bottoms (lil higher for higher TFs / lil lower for lower TFs)')
+
+
+//barcolor
+// bcolor = high >= UpperBand and LVP >= HVP * MR1 and rsi >= rsiOverBoughtLevel and high >= resistance and barstate.isconfirmed ? color.yellow : low <= LowerBand and HVP >= LVP * MR2 and rsi <= 45 and low <= support ? color.white : na
+// barcolor(bcolor)
+
+//alerts
+cold = low <= LowerBand and HVP >= LVP * MR2 and low <= support and vvbb_longs_allowed and barstate.isconfirmed
+hot = high >= UpperBand and LVP >= HVP * MR1 and high >= resistance and vvbb_shorts_allowed and barstate.isconfirmed
+
+//extra plotted indicators
+plotchar(hot, 'hot', '▼', location.abovebar, color.new(color.red, 0), size=size.tiny)
+plotchar(cold, 'hot', '▲', location.belowbar, color.new(color.green, 0), size=size.tiny)
+
+
+// bgcolor(deviation_longs_allowed ? color.new(color.blue, 50) : na)
+// bgcolor(deviation_shorts_allowed ? color.new(color.red, 50) : na)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+enableTrades = input.bool(true, 'Enable Trades?')
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+//SL & TP Calculations
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+
+var int defaultStopLossPoints = 8
+var int defaultTargetProfitPoints = 28
+var bool defaultUsePercentagesForTPandSL = false
+var float defaultStopLossPercentage = 0.35
+var float defaultTargetProfitPercentage = 0.7
+
+stopLossPoints = input.float(defaultStopLossPoints, 'Stop Loss (points)', minval=0, group='SL/TP Settings')
+takeProfitPoints = input.float(defaultTargetProfitPoints, 'Take Profit (points)', minval=0, group='SL/TP Settings')
+
+usePercentagesForTPandSL = input.bool(defaultUsePercentagesForTPandSL, title='Use Percentages for SL & TP', group='SL/TP Settings')
+stopLossPercentage = input.float(defaultStopLossPercentage, 'Stop Loss (%)', minval=0, step=0.1, group='SL/TP Settings')
+takeProfitPercentage = input.float(defaultTargetProfitPercentage, 'Take Profit (%)', minval=0, step=0.1, group='SL/TP Settings')
+
+calculatedTakeProfit = usePercentagesForTPandSL ? (strategy.position_avg_price * takeProfitPercentage / 100) : takeProfitPoints
+calculatedStopLoss = usePercentagesForTPandSL ? (strategy.position_avg_price * stopLossPercentage / 100) : stopLossPoints
+
+longTP = strategy.position_avg_price + calculatedTakeProfit
+longSL = strategy.position_avg_price - calculatedStopLoss
+
+shortTP = strategy.position_avg_price - calculatedTakeProfit
+shortSL = strategy.position_avg_price + calculatedStopLoss
+
+isLong() => strategy.position_size > 0
+isShort() => strategy.position_size < 0
+
+//Stop Selector
+SL = isLong() ? longSL : (isShort() ? shortSL : na)
+TP = isLong() ? longTP : (isShort() ? shortTP : na)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+candle_body_range = math.abs(close - open)
+candle_body_range_perc = candle_body_range / close * 100
+spike_prev_candle = candle_body_range_perc >= 0.13 and barstate.isconfirmed
+
+
+SLPointsForPineConnector = math.round(stopLossPercentage * 100 * close)
+TPPointsForPineConnector = math.round(takeProfitPercentage * 100 * close)
+
+
+longEntrySignal = cold and not isLong() and enableTrades and barstate.isconfirmed
+shortEntrySignal = hot and not isShort() and enableTrades and barstate.isconfirmed
+
+longExitSignal = hot and barstate.isconfirmed
+shortExitSignal = cold and barstate.isconfirmed
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////
+///////////////////////
+///////////////////////
+///////////////////////
+///////////////////////
+///////////////////////
+///////////////////////
+///////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////
+
+// if longEntrySignal and dwt_longs_allowed and mdx_long_condition and log_dgt_trade_allowed and not spike_prev_candle and mom_longs_allowed and deviation_longs_allowed // and not nss_longs_not_allowed // and ct_i_longs_allowed
+//     strategy.entry('long', direction=strategy.long)
+//     alert(pineconnectorLicenseID + ',buy,' + pineconnectorInputSymbol + ',sl=' + str.tostring(SLPointsForPineConnector) + ',tp=' + str.tostring(TPPointsForPineConnector) + ',risk=' + str.tostring(pineconnectorVolume) + ',trailtrig=' + str.tostring(SLPointsForPineConnector))
+
+
+// if shortEntrySignal and dwt_shorts_allowed and mdx_short_condition and not breakout_short_exit and log_dgt_trade_allowed and not spike_prev_candle and mom_shorts_allowed and deviation_shorts_allowed // and not nss_shorts_not_allowed // and ct_i_shorts_allowed
+//     strategy.entry('short', direction=strategy.short)
+//     alert(pineconnectorLicenseID + ',sell,' + pineconnectorInputSymbol + ',sl=' + str.tostring(SLPointsForPineConnector) + ',tp=' + str.tostring(TPPointsForPineConnector) + ',risk=' + str.tostring(pineconnectorVolume) + ',trailtrig=' + str.tostring(SLPointsForPineConnector))
+
+if longEntrySignal and dwt_longs_allowed and not breakout_long_exit and log_dgt_trade_allowed and not spike_prev_candle and deviation_longs_allowed and barstate.isconfirmed
+    strategy.entry('long', direction=strategy.long)
+    alert(pineconnectorLicenseID + ',buy,' + pineconnectorInputSymbol + ',sl=' + str.tostring(SLPointsForPineConnector) + ',tp=' + str.tostring(TPPointsForPineConnector) + ',risk=' + str.tostring(pineconnectorVolume) + ',trailtrig=' + str.tostring(SLPointsForPineConnector))
+
+
+if shortEntrySignal and dwt_shorts_allowed and not breakout_short_exit and log_dgt_trade_allowed and not spike_prev_candle and deviation_shorts_allowed and barstate.isconfirmed
+    strategy.entry('short', direction=strategy.short)
+    alert(pineconnectorLicenseID + ',sell,' + pineconnectorInputSymbol + ',sl=' + str.tostring(SLPointsForPineConnector) + ',tp=' + str.tostring(TPPointsForPineConnector) + ',risk=' + str.tostring(pineconnectorVolume) + ',trailtrig=' + str.tostring(SLPointsForPineConnector))
+
+
+
+if longExitSignal and isLong()
+    strategy.close_all(comment = 'hot__exit')
+    alert(pineconnectorLicenseID + ',closelong,' + pineconnectorInputSymbol)
+if shortExitSignal and isShort()
+    strategy.close_all(comment = 'cold__exit')
+    alert(pineconnectorLicenseID + ',closeshort,' + pineconnectorInputSymbol)
+
+if isLong()
+    strategy.exit('longexit', 'long', stop=SL, limit=TP)
+if isShort()
+    strategy.exit('shortexit', 'short', stop=SL, limit=TP)
+
+
+// Plot take profit values for confirmation (for 'long' trades)
+plot(series=isLong() ? TP : na, color=color.green, style=plot.style_linebr, linewidth=2, title="Long TP")
+plot(series=isLong() ? SL : na, color=color.red,   style=plot.style_linebr, linewidth=2, title="Long SL")
+
+// Plot take profit values for confirmation (for 'short' trades)
+plot(series=isShort() ? TP : na, color=color.green,   style=plot.style_linebr, linewidth=2, title="Short TP")
+plot(series=isShort() ? SL : na, color=color.red,     style=plot.style_linebr, linewidth=2, title="Short SL")
+
+lastEntryPrice = strategy.opentrades.entry_price(strategy.opentrades - 1)
+plot(isLong() or isShort() ? lastEntryPrice : na, color=color.blue, style=plot.style_linebr, linewidth=2, title="Entry price")
+
+is_current_trade_is_loosing = isLong() ? (lastEntryPrice > close) : (isShort() ? (lastEntryPrice < close) : false)
+
+
+
+
+
+
+
+
+
+inp11 = input.int(33, 'Slow Ema Length FOR EXTRA EXIT', 1, 100, group = 'Strategy Inputs')
+inp22 = input.int(18, 'Fast Ema Length FOR EXTRA EXIT', 1, 200, group = 'Strategy Inputs')
+use_cross_exit = input.bool(true, 'Use cross exit?')
+ema11 = ta.ema(close, inp11)
+ema22 = ta.ema(close, inp22)
+
+cross11 = ta.crossover(ema11, ema22)
+cross22 = ta.crossunder(ema11, ema22)
+
+
+if use_cross_exit and cross22 and isLong() and not is_current_trade_is_loosing and barstate.isconfirmed
+    strategy.close_all(comment = 'cross__exit')
+    alert(pineconnectorLicenseID + ',closelong,' + pineconnectorInputSymbol)
+if use_cross_exit and cross11 and isShort() and not is_current_trade_is_loosing and barstate.isconfirmed
+    strategy.close_all(comment = 'cross__exit')
+    alert(pineconnectorLicenseID + ',closeshort,' + pineconnectorInputSymbol)
+
+
+
+
+
+
+
+
+if use_breakout_exit and isLong() and breakout_long_exit and not is_current_trade_is_loosing and barstate.isconfirmed
+    strategy.close_all(comment = 'breakout__exit')
+    alert(pineconnectorLicenseID + ',closelong,' + pineconnectorInputSymbol)
+if use_breakout_exit and isShort() and breakout_short_exit and not is_current_trade_is_loosing and barstate.isconfirmed
+    strategy.close_all(comment = 'breakout__exit')
+    alert(pineconnectorLicenseID + ',closeshort,' + pineconnectorInputSymbol)
+
+
+
+spike_exit_percentage = input.float(0.1, 'Spike exit percentage last candle', step = 0.01)
+
+if candle_body_range_perc >= spike_exit_percentage and isLong() and candle_body_range_perc and barstate.isconfirmed
+    strategy.close_all(comment = 'spike__exit')
+    alert(pineconnectorLicenseID + ',closelong,' + pineconnectorInputSymbol)
+if candle_body_range_perc >= spike_exit_percentage and isShort() and candle_body_range_perc and barstate.isconfirmed
+    strategy.close_all(comment = 'spike__exit')
+    alert(pineconnectorLicenseID + ',closeshort,' + pineconnectorInputSymbol)
+
+
+use_log_dgt_exit = input.bool(true, 'use logistic dgt exit?')
+if use_log_dgt_exit and log_dgt_cross_upper and isLong() and not is_current_trade_is_loosing and barstate.isconfirmed
+    strategy.close_all(comment = 'log_dgt__exit')
+if use_log_dgt_exit and log_dgt_cross_down and isShort() and not is_current_trade_is_loosing and barstate.isconfirmed
+    strategy.close_all(comment = 'log_dgt__exit')
+
+
+
+use_deviation_zscore_exit = input.bool(true, 'use dev zscore exit?')
+
+if use_deviation_zscore_exit and deviation_shorts_allowed and not is_current_trade_is_loosing and isLong() and barstate.isconfirmed
+    strategy.close_all(comment = 'dev_z__exit')
+if use_deviation_zscore_exit and deviation_longs_allowed and not is_current_trade_is_loosing and isShort() and barstate.isconfirmed
+    strategy.close_all(comment = 'dev_z__exit')
+
+
+
+
+
+
+// https://www.tradingview.com/script/WBA7j6tU-Mean-Deviation-Index/
+
+mdx_ema_period = input.int(title='EMA Period', defval=26, minval=3, group = 'mdx', inline = 'mdx')
+mdx_atr_period = input.int(title='ATR Period', defval=26, minval=1, group = 'mdx', inline = 'mdx')
+mdx_atr_mult = input.float(title='ATR Multiplier', defval=3.0, minval=0.1, group = 'mdx', inline = 'mdx')
+mdx_atr_filter_type = input.string(title='ATR Filter Type', defval='Away from price', options=['Away from price', 'Closer to price'], group = 'mdx', inline = 'mdx')
+mdx_atr_stddev_length = input.int(title='ATR Filter Standard Deviation Length', defval=26, minval=1, group = 'mdx', inline = 'mdx')
+mdx_atr_stddev_low_lookback = input.int(title='ATR Filter Standard Deviation Low Lookback Period', defval=26, minval=1, group = 'mdx', inline = 'mdx')
+mdx_use_normalized = true
+mdx_use_volume = false
+mdx_use_exit = input.bool(true, 'use MDX as exit?', group = 'mdx', inline = 'mdx')
+
+
+// ------------------------------------------------------------------------------------
+//    ATR-filtered EMA
+// ------------------------------------------------------------------------------------
+
+get_atr(period, use_volume) =>
+    tr_val = mdx_use_normalized ? ta.tr / close : ta.tr
+    atr_val = (use_volume ? ta.rma(ta.tr * volume, mdx_atr_period) / ta.rma(volume, mdx_atr_period) : ta.atr(mdx_atr_period)) * mdx_atr_mult
+    atr_val
+
+get_afema(src, period, atr_period, stdev_period, filter_type, low_lookback, use_volume) =>
+    float result = na
+    float alpha = na
+    float stddev_factor = na
+
+    atr_val = get_atr(atr_period, use_volume)
+
+    stddev_a = ta.sma(math.pow(atr_val, 2), stdev_period)
+    stddev_b = math.pow(math.sum(atr_val, stdev_period), 2) / math.pow(stdev_period, 2)
+    stddev = math.sqrt(stddev_a - stddev_b)
+    stddev_lo = ta.lowest(stddev, low_lookback)
+
+    if filter_type == 'Away from price'
+        stddev_factor := math.min(stddev_lo / stddev, 5.0)
+        stddev_factor
+    else if filter_type == 'Closer to price'
+        stddev_factor := math.min(stddev / stddev_lo, 5.0)
+        stddev_factor
+
+    alpha := 2.0 * stddev_factor / (period + 1.0)
+
+    if na(src[1])
+        result := math.sum(src, period) / period
+        result
+    else
+        result := alpha * src + (1.0 - alpha) * nz(result[1])
+        result
+
+    // Return the result
+    result
+
+// ------------------------------------------------------------------------------------
+//    Mean Deviation Index calculations
+// ------------------------------------------------------------------------------------
+
+mdx_nom_source = mdx_use_volume ? close * volume : close
+mdx_nom_val = get_afema(mdx_nom_source, mdx_ema_period, mdx_atr_period, mdx_atr_stddev_length, mdx_atr_filter_type, mdx_atr_stddev_low_lookback, mdx_use_volume)
+
+mdx_denom_val = get_afema(volume, mdx_ema_period, mdx_atr_period, mdx_atr_stddev_length, mdx_atr_filter_type, mdx_atr_stddev_low_lookback, mdx_use_volume)
+
+mdx_vema_val = mdx_use_volume ? mdx_nom_val / mdx_denom_val : mdx_nom_val
+
+mdx_dev_val = close - mdx_vema_val
+mdx_atr_val = get_atr(mdx_atr_period, mdx_use_volume)
+mdx_val = mdx_dev_val > 0 ? math.max(mdx_dev_val - mdx_atr_val, 0) : math.min(mdx_dev_val + mdx_atr_val, 0)
+mdx_out = false ? 100 * ((mdx_val + mdx_vema_val - mdx_atr_val) / (mdx_vema_val - mdx_atr_val) - 1.0) : mdx_val
+
+// bg_clr = mdx_out > 0 ? color.green : mdx_out < 0 ? color.red : na
+
+mdx_long_condition = mdx_out < 0 and barstate.isconfirmed
+mdx_short_condition = mdx_out > 0 and barstate.isconfirmed
+
+
+if mdx_use_exit and mdx_short_condition and isLong() and not is_current_trade_is_loosing and barstate.isconfirmed
+    strategy.close_all(comment = 'mdx__exit')
+if mdx_use_exit and mdx_long_condition and isShort() and not is_current_trade_is_loosing and barstate.isconfirmed
+    strategy.close_all(comment = 'mdx__exit')
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+show_detailed_labels = input.bool(true, 'Show detailed entry labels?')
+
+
+// if longEntrySignal and dwt_longs_allowed and mdx_long_condition and log_dgt_trade_allowed and not spike_prev_candle and mom_longs_allowed // and not nss_longs_not_allowed // and ct_i_longs_allowed
+
+if longEntrySignal and show_detailed_labels
+    entry_label_text = "dwt_longs_allowed: " + str.tostring(dwt_longs_allowed) + "\n"
+         + "log_dgt_trade_allowed: " + str.tostring(log_dgt_trade_allowed) + "\n"
+         + "deviation_longs_allowed: " + str.tostring(deviation_longs_allowed) + "\n"
+    label.new(bar_index, high - high * 0.1 /100, entry_label_text, style=label.style_label_up, color = color.green)
+
+if shortEntrySignal and show_detailed_labels
+    entry_label_text = "dwt_shorts_allowed: " + str.tostring(dwt_shorts_allowed) + "\n"
+         + "log_dgt_trade_allowed: " + str.tostring(log_dgt_trade_allowed) + "\n"
+         + "deviation_shorts_allowed: " + str.tostring(deviation_shorts_allowed) + "\n"
+    label.new(bar_index, high + high * 0.1 /100, entry_label_text, style=label.style_label_down, color = color.red)
+
+
+
+
+
