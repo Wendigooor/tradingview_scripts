@@ -1,0 +1,806 @@
+//@version=5
+strategy(
+     'IDEAL trend v4 supertrend + CHANGE CR',
+     default_qty_value=10000,
+     initial_capital=1000, 
+     currency=currency.USD, 
+     calc_on_every_tick=true,
+     overlay=true
+     )
+
+
+
+
+pineconnectorLicenseID = input.string(title='Pineconnector ID', defval='12345', group='Pineconnector Alert Settings', inline = 'pineconnectecor')
+pineconnectorInputSymbol = input.string(title='Symbol (MT4/MT5)', defval='EURUSD', group='Pineconnector Alert Settings', inline = 'pineconnectecor')
+pineconnectorVolume = input.float(0.1, 'lots size', minval=0.0, step=0.1, group='Pineconnector Alert Settings', inline = 'pineconnectecor')
+
+
+
+
+
+
+
+
+
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+// GREEDZONE PART
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+
+greedZoneSource = input.source(ohlc4, title='GreedZone Source1', group='Greed Zone (SHORT)', inline = 'Greed Zone (SHORT)')
+greedZonelowPeriod = input.int(25, title='Low Period1',  group='Greed Zone (SHORT)', inline = 'Greed Zone (SHORT)')
+greedZoneStdevPeriod = input.int(60, title='Stdev Period1',  group='Greed Zone (SHORT)', inline = 'Greed Zone (SHORT)')
+greedZoneUseWMA = input.bool(true, title='Use WMA instead of SMA?1',  group='Greed Zone (SHORT)', inline = 'Greed Zone (SHORT)')
+greedZoneUseDrawSignalsOnChart = input.bool(true, title='Draw Signals on chart?1',  group='Greed Zone (SHORT)', inline = 'Greed Zone (SHORT)')
+
+// Condition One
+greedZoneFZ1 = (ta.lowest(greedZoneSource, greedZonelowPeriod) - greedZoneSource) / ta.lowest(greedZoneSource, greedZonelowPeriod)
+greedZoneAVG1 = ta.sma(greedZoneFZ1, greedZoneStdevPeriod)
+
+if greedZoneUseWMA
+    greedZoneAVG1 := ta.wma(greedZoneFZ1, greedZoneStdevPeriod)
+    greedZoneAVG1
+
+greedZoneSTDEV1 = ta.stdev(greedZoneFZ1, greedZoneStdevPeriod)
+greedZoneFZ1Limit = greedZoneAVG1 - greedZoneSTDEV1
+
+// Condition Two
+greedZoneFZ2 = ta.sma(greedZoneSource, greedZonelowPeriod)
+greedZoneAVG2 = ta.sma(greedZoneFZ2, greedZoneStdevPeriod)
+
+if greedZoneUseWMA
+    greedZoneFZ2 := ta.wma(greedZoneSource, greedZonelowPeriod)
+    greedZoneAVG2 := ta.wma(greedZoneFZ2, greedZoneStdevPeriod)
+    greedZoneAVG2
+
+greedZoneSTDEV2 = ta.stdev(greedZoneFZ2, greedZoneStdevPeriod)
+greedZoneFZ2Limit = greedZoneAVG2 + greedZoneSTDEV2
+
+// Draw something
+greedZoneCondition = greedZoneFZ1 < greedZoneFZ1Limit and greedZoneFZ2 > greedZoneFZ2Limit and barstate.isconfirmed
+greedZoneCandleOpen = greedZoneCondition and greedZoneUseDrawSignalsOnChart ? low + ta.tr : na
+greedZoneCandleClose = greedZoneCondition and greedZoneUseDrawSignalsOnChart ? low + 2 * ta.tr : na
+
+plotcandle(greedZoneCandleOpen, greedZoneCandleOpen, greedZoneCandleClose, greedZoneCandleClose, color=color.red, bordercolor=color.red, title='GreedZone Candlesticks')
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+// FEARZONE PART
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+
+fearZoneSource = input.source(ohlc4, title='FearZone Source2', group='Fear Zone (LONGS)', inline ='Fear Zone (LONGS)')
+fearZoneHighPeriod = input.int(25, title='High Period2',  group='Fear Zone (LONGS)', inline ='Fear Zone (LONGS)')
+fearZoneStdevPeriod = input.int(60, title='Stdev Period2',  group='Fear Zone (LONGS)', inline ='Fear Zone (LONGS)')
+fearZoneUseWMA = input.bool(true, title='Use WMA instead of SMA?2',  group='Fear Zone (LONGS)', inline ='Fear Zone (LONGS)')
+fearZoneUseDrawOnChart = input.bool(true, title='Draw on chart?2', group='Fear Zone (LONGS)', inline ='Fear Zone (LONGS)')
+
+// Condition One 
+fearZoneFZ1 = (ta.highest(fearZoneSource, fearZoneHighPeriod) - fearZoneSource) / ta.highest(fearZoneSource, fearZoneHighPeriod)
+fearZoneAVG1 = ta.sma(fearZoneFZ1, fearZoneStdevPeriod)
+
+if fearZoneUseWMA 
+    fearZoneAVG1 := ta.wma(fearZoneFZ1, fearZoneStdevPeriod)
+
+fearZoneSTDEV1 = ta.stdev(fearZoneFZ1, fearZoneStdevPeriod)
+fearZoneFZ1Limit = fearZoneAVG1 + fearZoneSTDEV1
+
+// Condition Two
+fearZoneFZ2 = ta.sma(fearZoneSource, fearZoneHighPeriod)
+fearZoneAVG2 = ta.sma(fearZoneFZ2, fearZoneStdevPeriod)
+
+if fearZoneUseWMA 
+    fearZoneFZ2 := ta.wma(fearZoneSource, fearZoneHighPeriod)
+    fearZoneAVG2 := ta.wma(fearZoneFZ2, fearZoneStdevPeriod)
+    
+fearZoneSTDEV2 = ta.stdev(fearZoneFZ2, fearZoneStdevPeriod)
+fearZoneFZ2Limit = fearZoneAVG2 - fearZoneSTDEV2
+
+// FearZone
+fearZoneCondition = fearZoneFZ1 > fearZoneFZ1Limit and fearZoneFZ2 < fearZoneFZ2Limit and barstate.isconfirmed
+fearZoneCandleOpen = fearZoneCondition and fearZoneUseDrawOnChart ? low - ta.tr :na
+FearZoneCandleClose = fearZoneCondition and fearZoneUseDrawOnChart ? low - 2 * ta.tr :na
+
+
+
+
+
+
+
+
+
+
+
+useStochasticAsFilter = input.bool(defval=true, title="Use Stochastic?", group = 'Stochastic', inline = 'stoch')
+
+stoch_len = input.int(9, minval=1, title="St Length", group = 'Stochastic', inline = 'stoch')
+stoch_smoothK = input.int(5, minval=1, title="St SmoothK", group = 'Stochastic', inline = 'stoch')
+stoch_smoothD = input.int(4, minval=1, title="St SmoothD", group = 'Stochastic', inline = 'stoch')
+stoch_upLine = input.int(40, minval=0, step=5, maxval=100, title="OB (shorts - above line)", group = 'Stochastic', inline = 'stoch')
+stoch_lowLine = input.int(60, minval=0, step=5, maxval=100, title="OS (longs - below line)", group = 'Stochastic', inline = 'stoch')
+
+stoch_resCustomStoch = input.timeframe(title="Stochastic Timeframe", defval="5", group = 'Stochastic', inline = 'stoch')
+
+//Stoch formula
+stoch_k = ta.sma(ta.stoch(close, high, low, stoch_len), stoch_smoothK)
+stoch_d = ta.sma(stoch_k, stoch_smoothD)
+stoch_outK = request.security(syminfo.tickerid, stoch_resCustomStoch, stoch_k)
+stoch_outD = request.security(syminfo.tickerid, stoch_resCustomStoch, stoch_d)
+
+//definitions for Cross
+stochAboveLine = useStochasticAsFilter ? stoch_outK > stoch_upLine and barstate.isconfirmed : true
+stochBelowLine = useStochasticAsFilter ? stoch_outK < stoch_lowLine and barstate.isconfirmed : true
+
+
+
+
+
+
+
+
+
+// MovAvgType() returns the specified moving average type with 
+// the given length and data source. Shows an error on the chart
+// when the given moving average type is unknown to the function.
+MovAvgType(averageType, averageSource, averageLength) =>
+	switch str.upper(averageType)
+        "SMA"  => ta.sma(averageSource, averageLength)
+        "EMA"  => ta.ema(averageSource, averageLength)
+        "WMA"  => ta.wma(averageSource, averageLength)
+        "HMA"  => ta.hma(averageSource, averageLength)
+        "RMA"  => ta.rma(averageSource, averageLength)
+        "SWMA" => ta.swma(averageSource)
+        "ALMA" => ta.alma(averageSource, averageLength, 0.85, 6)
+        "VWMA" => ta.vwma(averageSource, averageLength)
+        "VWAP" => ta.vwap(averageSource)
+        => runtime.error("Moving average type '" + averageType + 
+             "' not found!"), na
+
+
+
+
+
+
+
+//HULL TREND WITH KAHLMAN
+srchull = input(hl2, 'Price Data', group = 'Hull / Kahlman', inline = 'Hull / Kahlman')
+lengthhull = input(24, 'Lookback', group = 'Hull / Kahlman', inline = 'Hull / Kahlman')
+showcross = input(true, 'Show cross over/under', group = 'Hull / Kahlman', inline = 'Hull / Kahlman')
+gain = input.int(7500, 'Gain', maxval = 10000, group = 'Hull / Kahlman', inline = 'Hull / Kahlman')
+k = input(true, 'Use Kahlman', group = 'Hull / Kahlman', inline = 'Hull / Kahlman')
+
+hma2(_srchull, _lengthhull) =>
+    ta.wma((2 * ta.wma(_srchull, _lengthhull / 2)) - ta.wma(_srchull, _lengthhull), math.round(math.sqrt(_lengthhull)))
+
+hma3(_srchull, _lengthhull) =>
+    p = lengthhull / 2
+    ta.wma(ta.wma(close, p / 3) * 3 - ta.wma(close, p / 2) - ta.wma(close, p), p)
+
+kahlman(x, g) =>
+    kf = 0.0
+    dk = x - nz(kf[1], x)
+    smooth = nz(kf[1], x) + dk * math.sqrt(g / 10000 * 2)
+    velo = 0.0
+    velo := nz(velo[1], 0) + g / 10000 * dk
+    kf := smooth + velo
+    kf
+
+a = k ? kahlman(hma2(srchull, lengthhull), gain) : hma2(srchull, lengthhull)
+b = k ? kahlman(hma3(srchull, lengthhull), gain) : hma3(srchull, lengthhull)
+c = b > a ? color.lime : color.red
+crossdn = a > b and a[1] < b[1] and barstate.isconfirmed
+crossup = b > a and b[1] < a[1] and barstate.isconfirmed
+
+
+
+
+
+
+
+
+
+
+
+// // indicator - "Dynamic Linear Regression Oscillator | Adulari"
+
+// // Inputs
+// lin_regr_osc_length = input.int(5,minval=1,title='LinRegrOsc Length',group='LinRegOsc', inline = 'LinRegOsc')
+// lin_regr_osc_smoothing = input.int(10,minval=2,title='LinRegrOsc Smoothing',group='LinRegOsc', inline = 'LinRegOsc')
+// lin_regr_osc_upperMultiplier = input.float(2.0,step=0.1, title="LinRegrOsc Upper Mult",group='LinRegOsc', inline = 'LinRegOsc')
+// lin_regr_osc_lowerMultiplier = input.float(2.0,step=0.1, title="LinRegrOsc Lower Mult",group='LinRegOsc', inline = 'LinRegOsc')
+// lin_regr_osc_maType = input.string('SMA',options=['SMA', 'EMA', 'HMA', 'RMA', 'WMA', 'SWMA', 'ALMA', 'VWMA', 'VWAP'],title='LinRegrOsc MA Type',group='LinRegOsc', inline = 'LinRegOsc')
+// lin_regr_osc_smoothingType = input.string('SMA',options=['SMA', 'EMA', 'HMA', 'RMA', 'WMA', 'SWMA', 'ALMA', 'VWMA', 'VWAP'],title=' LinRegrOsc Smoothing Type',group='LinRegOsc', inline = 'LinRegOsc')
+// lin_regr_osc_rescaleBarsBack = input.int(200,minval=20,title='Rescale Bars Back',group='LinRegOsc', inline = 'LinRegOsc')
+
+// use_lin_reg = input.bool(true, 'Use Lin Reg as filter?')
+// lin_regr_osc_longs_below = input.int(40, 'LinRegrOsc longs below',group='LinRegOsc', inline = 'LinRegOsc')
+// lin_regr_osc_shorts_above = input.int(60, 'LinRegrOsc longs above',group='LinRegOsc', inline = 'LinRegOsc')
+
+
+// // Functions
+// lin_reg_ma(float source, simple int length, string maType) =>
+//     switch maType
+//         'SMA' => ta.sma(source, length)
+//         'EMA' => ta.ema(source, length)
+//         'RMA' => ta.rma(source, length)
+//         'WMA' => ta.wma(source, length)
+//         'VWMA' => ta.vwma(source, length)
+//         'HMA' => ta.hma(source, length)
+// rescale(float value, float oldMin, float oldMax, float newMin, float newMax) =>
+//     newMin + (newMax - newMin) * (value - oldMin) / math.max(oldMax - oldMin, 10e-10)
+// slope(source, length) =>
+//     max_bars_back(source, 5000)
+//     if barstate.isfirst or length <= 1
+//         [float(na), float(na), float(na)]
+//     else
+//         sumX = 0.0
+//         sumY = 0.0
+//         sumXSqr = 0.0
+//         sumXY = 0.0
+//         for i = 0 to length - 1 by 1
+//             val = source[i]
+//             per = i + 1.0
+//             sumX += per
+//             sumY += val
+//             sumXSqr += per * per
+//             sumXY += val * per
+//         slope = (length * sumXY - sumX * sumY) / (length * sumXSqr - sumX * sumX)
+//         average = sumY / length
+//         intercept = average - slope * sumX / length + slope
+//         [slope, average, intercept]
+// var lin_regr_osc_start_index = 1
+// lin_regr_osc_lengthInput = bar_index -  lin_regr_osc_start_index + 1
+// [lin_regr_osc_s, lin_regr_osc_a, lin_regr_osc_i] = slope(close, lin_regr_osc_lengthInput)
+// lin_regr_osc_startPrice = lin_regr_osc_i + lin_regr_osc_s * (lin_regr_osc_lengthInput - 1)
+// lin_regr_osc_endPrice = lin_regr_osc_i
+// deviation(source, length, slope, average, intercept) =>
+//     if barstate.isfirst or length <= 1
+//         [float(na), float(na), float(na), float(na)]
+//     else
+//         upDev = 0.0
+//         dnDev = 0.0
+//         stdDevAcc = 0.0
+//         dsxx = 0.0
+//         dsyy = 0.0
+//         dsxy = 0.0
+//         periods = length - 1
+//         daY = intercept + slope * periods / 2
+//         val = intercept
+//         for j = 0 to periods by 1
+//             price = high[j] - val
+//             if price > upDev
+//                 upDev := price
+//             price := val - low[j]
+//             if price > dnDev
+//                 dnDev := price
+//             price := source[j]
+//             dxt = price - average
+//             dyt = val - daY
+//             price -= val
+//             stdDevAcc += price * price
+//             dsxx += dxt * dxt
+//             dsyy += dyt * dyt
+//             dsxy += dxt * dyt
+//             val += slope
+//         stdDev = math.sqrt(stdDevAcc / (periods == 0 ? 1 : periods))
+//         pearsonR = dsxx == 0 or dsyy == 0 ? 0 : dsxy / math.sqrt(dsxx * dsyy)
+//         [stdDev, pearsonR, upDev, dnDev]
+// [lin_regr_osc_stdDev, lin_regr_osc_pearsonR, lin_regr_osc_upDev, lin_regr_osc_dnDev] = deviation(close, lin_regr_osc_lengthInput, lin_regr_osc_s, lin_regr_osc_a, lin_regr_osc_i)
+// lin_regr_osc_upperStartPrice = lin_regr_osc_startPrice + lin_regr_osc_upperMultiplier * lin_regr_osc_stdDev
+// lin_regr_osc_upperEndPrice = lin_regr_osc_endPrice + lin_regr_osc_upperMultiplier * lin_regr_osc_stdDev
+// lin_regr_osc_lowerStartPrice = lin_regr_osc_startPrice - lin_regr_osc_lowerMultiplier * lin_regr_osc_stdDev
+// lin_regr_osc_lowerEndPrice = lin_regr_osc_endPrice - lin_regr_osc_lowerMultiplier * lin_regr_osc_stdDev
+// if (close > lin_regr_osc_upperEndPrice or close < lin_regr_osc_lowerEndPrice) and (not barstate.islast or barstate.isconfirmed)
+//     lin_regr_osc_start_index := bar_index
+
+// // Calculations
+// lin_regr_osc_value = lin_reg_ma(close > lin_regr_osc_startPrice ? high / lin_regr_osc_startPrice : low / lin_regr_osc_startPrice, lin_regr_osc_length, lin_regr_osc_maType)
+// lin_regr_osc_value := rescale(lin_regr_osc_value, ta.lowest(lin_regr_osc_value, lin_regr_osc_rescaleBarsBack), ta.highest(lin_regr_osc_value, lin_regr_osc_rescaleBarsBack), 0, 100)
+// lin_regr_osc_signal = lin_reg_ma(lin_regr_osc_value, lin_regr_osc_smoothing, lin_regr_osc_smoothingType)
+
+
+
+// lin_regr_osc_longs_allowed = use_lin_reg ? (lin_regr_osc_signal <= lin_regr_osc_longs_below and barstate.isconfirmed) : true
+// lin_regr_osc_shorts_allowed = use_lin_reg ? (lin_regr_osc_signal >= lin_regr_osc_shorts_above and barstate.isconfirmed) : true
+
+lin_regr_osc_longs_allowed = true
+lin_regr_osc_shorts_allowed = true
+
+
+
+
+
+
+vix_price = request.security("CBOE:VIX", "120", close)
+vix_allowed_limit = input.float(30, 'Vix upper limit')
+// plot(vix_price)
+
+vix_trades_allowed = vix_price <= vix_allowed_limit and barstate.isconfirmed
+
+
+
+
+
+
+
+
+
+
+srctcr=input(hlc3, title="cr source")
+lentcr=input.int(25, title="cr lenght", maxval=1000)
+cr(x, y) =>
+    z = 0.0
+    w = 0.0
+    for i = 0 to y-1
+        z:=z + x[i]*(-math.cos((22/7)*2*(i)/(y+1))*(y+1)/4+(y+1)/4)
+        w:= w + (-math.cos((22/7)*2*(i)/(y+1))*(y+1)/4+(y+1)/4)
+    z/w
+cr= cr(srctcr, 2 * lentcr - 1) 
+mom = ta.change(cr)
+ac = ta.change(mom)
+x = (mom > 0 and ac > 0) ? 2 : (mom > 0 and ac < 0) ? 1 : (mom < 0 and ac < 0) ? -2 : (mom < 0 and ac > 0) ? -1 : na
+y = ta.cum(x)
+// plot(y, color = x>1 ? color.rgb(0, 255, 0) : x<-1 ? color.rgb(255, 0, 0) : x>0 ? color.rgb(155, 255, 0) : color.rgb(255, 155, 0), linewidth = 2)
+// plot(ta.sma(y,100), trackprice = true, display = display.none, color = color.rgb(255, 255, 255))
+
+
+cr_uptrend = x == 2 and barstate.isconfirmed
+cr_uptrend_end = x == 1 and barstate.isconfirmed
+
+cr_downtrend = x == -2 and barstate.isconfirmed
+cr_downtrend_end = x == -1 and barstate.isconfirmed
+
+// bgcolor(cr_uptrend ? color.new(color.blue, 20) : na)
+// bgcolor(cr_downtrend ? color.new(color.red, 20) : na)
+
+// bgcolor(cr_uptrend_end ? color.new(color.blue, 70) : na)
+// bgcolor(cr_downtrend_end ? color.new(color.red, 70) : na)
+
+
+
+
+
+
+supertrend_Periods = input(title='supertrend_ATR Period', defval=10)
+supertrend_src = input(hl2, title='supertrend_Source')
+supertrend_Multiplier = input.float(title='supertrend_ATR Multiplier', step=0.1, defval=3.0)
+supertrend_changeATR = input(title='Change supertrend_ATR Calculation Method ?', defval=true)
+supertrend_atr2 = ta.sma(ta.tr, supertrend_Periods)
+supertrend_atr = supertrend_changeATR ? ta.atr(supertrend_Periods) : supertrend_atr2
+supertrend_up = supertrend_src - supertrend_Multiplier * supertrend_atr
+supertrend_up1 = nz(supertrend_up[1], supertrend_up)
+supertrend_up := close[1] > supertrend_up1 ? math.max(supertrend_up, supertrend_up1) : supertrend_up
+supertrend_dn = supertrend_src + supertrend_Multiplier * supertrend_atr
+supertrend_dn1 = nz(supertrend_dn[1], supertrend_dn)
+supertrend_dn := close[1] < supertrend_dn1 ? math.min(supertrend_dn, supertrend_dn1) : supertrend_dn
+supertrend_trend = 1
+supertrend_trend := nz(supertrend_trend[1], supertrend_trend)
+supertrend_trend := supertrend_trend == -1 and close > supertrend_dn1 ? 1 : supertrend_trend == 1 and close < supertrend_up1 ? -1 : supertrend_trend
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+//SL & TP Calculations
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+
+var int defaultStopLossPoints = 8
+var int defaultTargetProfitPoints = 28
+var bool defaultUsePercentagesForTPandSL = true
+var float defaultStopLossPercentage = 0.07
+var float defaultTargetProfitPercentage = 0.2
+
+
+enableTrades = input.bool(true, 'Enable trades?', group='SL/TP Settings', inline = 'SL/TP Settings')
+usePercentagesForTPandSL = input.bool(defaultUsePercentagesForTPandSL, title='Use Percentages for SL & TP', group='SL/TP Settings', inline = 'SL/TP Settings')
+
+
+stopLossPoints = input.float(defaultStopLossPoints, 'Stop Loss (points)', minval=0, group='SL/TP Settings', inline = 'SL/TP Settings')
+takeProfitPoints = input.float(defaultTargetProfitPoints, 'Take Profit (points)', minval=0, group='SL/TP Settings', inline = 'SL/TP Settings')
+
+stopLossPercentage = input.float(defaultStopLossPercentage, 'Stop Loss (%)', minval=0, step=0.1, group='SL/TP Settings', inline = 'SL/TP Settings')
+takeProfitPercentage = input.float(defaultTargetProfitPercentage, 'Take Profit (%)', minval=0, step=0.1, group='SL/TP Settings', inline = 'SL/TP Settings')
+
+calculatedTakeProfit = usePercentagesForTPandSL ? (strategy.position_avg_price * takeProfitPercentage / 100) : takeProfitPoints
+calculatedStopLoss = usePercentagesForTPandSL ? (strategy.position_avg_price * stopLossPercentage / 100) : stopLossPoints
+
+longTP = strategy.position_avg_price + calculatedTakeProfit
+longSL = strategy.position_avg_price - calculatedStopLoss
+
+shortTP = strategy.position_avg_price - calculatedTakeProfit
+shortSL = strategy.position_avg_price + calculatedStopLoss
+
+isLong() => strategy.position_size > 0
+isShort() => strategy.position_size < 0
+
+//Stop Selector
+SL = isLong() ? longSL : (isShort() ? shortSL : na)
+TP = isLong() ? longTP : (isShort() ? shortTP : na)
+
+
+
+SLPointsForPineConnector = math.round((stopLossPercentage + 0.005) * 100 * close)
+TPPointsForPineConnector = math.round((takeProfitPercentage - 0.005) * 100 * close)
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////
+///////////////////////
+///////////////////////
+///////////////////////
+///////////////////////
+///////////////////////
+///////////////////////
+///////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+// last_trade_was_long = strategy.position_size[1] > 0
+// last_trade_was_short = strategy.position_size[1] < 0
+
+// last_trade_was_long = strategy.closedtrades.size(strategy.closedtrades - 1) > 0
+// last_trade_was_short = strategy.closedtrades.size(strategy.closedtrades - 1) < 0
+
+
+longEntrySignal = crossup and vix_trades_allowed and stochBelowLine and lin_regr_osc_longs_allowed and (cr_uptrend or cr_downtrend_end) and supertrend_trend == 1 and not greedZoneCondition and enableTrades and barstate.isconfirmed
+shortEntrySignal = crossdn and vix_trades_allowed and stochAboveLine and lin_regr_osc_shorts_allowed and (cr_downtrend or cr_uptrend_end) and supertrend_trend == -1 and not fearZoneCondition and enableTrades and barstate.isconfirmed
+
+
+if longEntrySignal and barstate.isconfirmed
+    strategy.entry('long', direction=strategy.long)
+    alert(pineconnectorLicenseID + ',buy,' + pineconnectorInputSymbol + ',sl=' + str.tostring(SLPointsForPineConnector) + ',tp=' + str.tostring(TPPointsForPineConnector) + ',risk=' + str.tostring(pineconnectorVolume) + ',trailtrig=' + str.tostring(SLPointsForPineConnector))
+
+if shortEntrySignal and barstate.isconfirmed
+    strategy.entry('short', direction=strategy.short)
+    alert(pineconnectorLicenseID + ',sell,' + pineconnectorInputSymbol + ',sl=' + str.tostring(SLPointsForPineConnector) + ',tp=' + str.tostring(TPPointsForPineConnector) + ',risk=' + str.tostring(pineconnectorVolume) + ',trailtrig=' + str.tostring(SLPointsForPineConnector))
+
+
+if isLong()
+    strategy.exit('longexit', 'long', stop=SL, limit=TP)
+if isShort()
+    strategy.exit('shortexit', 'short', stop=SL, limit=TP)
+
+
+// Plot take profit values for confirmation (for 'long' trades)
+plot(series=isLong() ? TP : na, color=color.green, style=plot.style_linebr, linewidth=2, title="Long TP")
+plot(series=isLong() ? SL : na, color=color.red,   style=plot.style_linebr, linewidth=2, title="Long SL")
+
+// Plot take profit values for confirmation (for 'short' trades)
+plot(series=isShort() ? TP : na, color=color.green,   style=plot.style_linebr, linewidth=2, title="Short TP")
+plot(series=isShort() ? SL : na, color=color.red,     style=plot.style_linebr, linewidth=2, title="Short SL")
+
+lastEntryPrice = strategy.opentrades.entry_price(strategy.opentrades - 1)
+plot(isLong() or isShort() ? lastEntryPrice : na, color=color.blue, style=plot.style_linebr, linewidth=2, title="Entry price")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////
+///////////////////////
+///////////////////////
+///////////////////////.    EXIT EXIT EXIT EXIT EXIT EXIT
+///////////////////////
+///////////////////////
+///////////////////////
+///////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+is_current_trade_is_loosing = isLong() ? (lastEntryPrice > close) : (isShort() ? (lastEntryPrice < close) : false)
+
+
+
+
+
+
+
+vvb_src = input.source(hlc3, title = 'vvb source', group = 'VVB', inline = 'VVB')
+vvb_al = input.int(8, title='al', group = 'VVB', inline = 'VVB')
+vvb_vl = input.int(13, title='vl', group = 'VVB', inline = 'VVB')
+vvb_df = input.float(3, title = 'df', group = 'VVB', inline = 'VVB')
+vvb_lba = input.float(0.9, title = 'lba', group = 'VVB', inline = 'VVB')
+vvb_typical = vvb_src >= vvb_src[1] ? vvb_src - low[1] : vvb_src[1] - low
+vvb_deviation = vvb_df * ta.sma(vvb_typical, vvb_vl)
+vvb_devHigh = ta.ema(vvb_deviation, vvb_al)
+vvb_devLow = vvb_lba * vvb_devHigh
+vvb_medianAvg = ta.ema(vvb_src, vvb_al)
+vvb_MidLine = ta.sma(vvb_medianAvg, vvb_al)
+vvb_UpperBand = ta.ema(vvb_medianAvg, vvb_al) + vvb_devHigh
+vvb_LowerBand = ta.ema(vvb_medianAvg, vvb_al) - vvb_devLow
+
+//Leledc from insilico
+exhaustionSwitch = true
+levelSwitch = true
+vvb_length = input.int(40, title = 'leledc length', group = 'VVB', inline = 'VVB')
+vvb_bars = input.int(10, title = 'leledc bars', group = 'VVB', inline = 'VVB')
+Lelec(bars, len) =>
+    bindex = int(na)
+    bindex := nz(bindex[1], 0)
+    sindex = int(na)
+    sindex := nz(sindex[1], 0)
+    return_1 = 0
+    bindex := close > close[4] ? bindex + 1 : bindex
+    sindex := close < close[4] ? sindex + 1 : sindex
+    if bindex > bars and close < open and high >= ta.highest(high, len)
+        bindex := 0
+        return_1 := -1
+        return_1
+    else
+        if sindex > bars and close > open and low <= ta.lowest(low, len)
+            sindex := 0
+            return_1 := 1
+            return_1
+Lelex = Lelec(vvb_bars, vvb_length)
+highlel = Lelex == -1 ? high : na
+lowlel = Lelex == 1 ? low : na
+resistance = float(na)
+support = float(na)
+resistance := close < open and Lelex ? high : resistance[1]
+support := close > open and Lelex ? low : support[1]
+
+//volume
+hvpValue = input.int(12, title = 'HVP', group = 'VVB', inline = 'VVB')
+HVP = ta.vwma(ta.vwap, hvpValue)
+lvpValue = input.int(3, title = 'LVP', group = 'VVB', inline = 'VVB')
+LVP = ta.vwma(ta.vwap, lvpValue)
+MR1 = input.float(1.000, step = 0.0001, title='MR1', group = 'VVB', inline = 'VVB')
+MR2 = input.float(1.000, step = 0.0001, title='MR2', group = 'VVB', inline = 'VVB')
+
+//alerts
+vvb_long_signal = low <= vvb_LowerBand and HVP >= LVP * MR2 and low <= support and barstate.isconfirmed
+vvb_short_signal = high >= vvb_UpperBand and LVP >= HVP * MR1 and high >= resistance and barstate.isconfirmed
+
+use_vvb_exit = input.bool(true, 'Use VVB exit?', group = 'VVB', inline = 'VVB')
+
+if use_vvb_exit and vvb_short_signal and isLong() and barstate.isconfirmed
+    strategy.close_all(comment = 'vvb__exit')
+    alert(pineconnectorLicenseID + ',closelong,' + pineconnectorInputSymbol)
+    // alert(pineconnectorLicenseID + ',closelong,' + pineconnectorInputSymbol)
+if use_vvb_exit and vvb_long_signal and isShort() and barstate.isconfirmed
+    strategy.close_all(comment = 'vvb__exit')
+    alert(pineconnectorLicenseID + ',closeshort,' + pineconnectorInputSymbol)
+
+
+
+
+// TomDemark
+
+// -------- Calculate bearish trend sequence --------
+tom_demark_buySetup = 0
+tom_demark_buySetup := close < close[4] ? tom_demark_buySetup[1] == 13 ? 1 : tom_demark_buySetup[1] + 1 : 0
+
+// -------- Calculate bullish trend sequence --------
+tom_demark_sellSetup = 0
+tom_demark_sellSetup := close > close[4] ? tom_demark_sellSetup[1] == 13 ? 1 : tom_demark_sellSetup[1] + 1 : 0
+
+
+use_tom_demark_exit = input.bool(true, 'Use Tom Demark exit?', group = 'TomDemark', inline = 'TomDemark')
+tom_demark_exit_strength = input.int(7, 'TD Exit strength', group = 'TomDemark', inline = 'TomDemark')
+
+tom_demark_long_exit = tom_demark_buySetup >= tom_demark_exit_strength and barstate.isconfirmed
+tom_demark_short_exit = tom_demark_sellSetup >= tom_demark_exit_strength and barstate.isconfirmed
+
+if use_tom_demark_exit and tom_demark_short_exit and isLong() and barstate.isconfirmed
+    strategy.close_all(comment = 'td__exit')
+    alert(pineconnectorLicenseID + ',closelong,' + pineconnectorInputSymbol)
+    // alert(pineconnectorLicenseID + ',closelong,' + pineconnectorInputSymbol)
+if use_tom_demark_exit and tom_demark_long_exit and isShort() and barstate.isconfirmed
+    strategy.close_all(comment = 'td__exit')
+    alert(pineconnectorLicenseID + ',closeshort,' + pineconnectorInputSymbol)
+
+
+
+
+
+fisher_transf_len = input.int(9, minval=1, title='Fisher Transform Length', group = 'Fisher', inline = 'Fisher')
+fisher_emaLength = input(title='Fisher EMA Length', defval=50, group = 'Fisher', inline = 'Fisher')
+fisher_emaValue = ta.ema(close * 100000000, fisher_emaLength)
+fisher_distFromEMA = close * 100000000 - fisher_emaValue
+
+fisher_high_ = ta.highest(fisher_distFromEMA, fisher_transf_len)
+fisher_low_ = ta.lowest(fisher_distFromEMA, fisher_transf_len)
+round_(val) =>
+    val > .99 ? .999 : val < -.99 ? -.999 : val
+fisher_value = 0.0
+fisher_value := round_(.66 * ((fisher_distFromEMA - fisher_low_) / math.max(fisher_high_ - fisher_low_, .001) - .5) + .67 * nz(fisher_value[1]))
+fish1 = 0.0
+fish1 := .5 * math.log((1 + fisher_value) / math.max(1 - fisher_value, .001)) + .5 * nz(fish1[1])
+
+use_fisher_exit = input.bool(true, 'Use Fisher exit?' , group = 'Fisher', inline = 'Fisher')
+fisher_exit_n_bars_since_entry = input.int(20, 'Fisher Exit N bar since entry:' , group = 'Fisher', inline = 'Fisher')
+
+bars_since_last_entry = ta.barssince(strategy.position_size == 0)
+fisher_long_exit = bars_since_last_entry >= fisher_exit_n_bars_since_entry and fish1 >= 1.5 and barstate.isconfirmed
+fisher_short_exit = bars_since_last_entry >= fisher_exit_n_bars_since_entry and fish1 <= -1.5 and barstate.isconfirmed
+
+if use_fisher_exit and isLong() and fisher_long_exit and barstate.isconfirmed
+    strategy.close_all(comment = 'fisher__exit')
+    alert(pineconnectorLicenseID + ',closelong,' + pineconnectorInputSymbol)
+if use_fisher_exit and isShort() and fisher_short_exit and barstate.isconfirmed
+    strategy.close_all(comment = 'fisher__exit')
+    alert(pineconnectorLicenseID + ',closeshort,' + pineconnectorInputSymbol)
+
+
+
+
+
+use_cr_trend_change_exit = input.bool(true, 'Use CR trend change?')
+
+if use_cr_trend_change_exit and isLong() and not cr_uptrend and barstate.isconfirmed
+    strategy.close_all(comment = 'cr_trend__exit')
+    alert(pineconnectorLicenseID + ',closelong,' + pineconnectorInputSymbol)
+if use_cr_trend_change_exit and isShort() and not cr_downtrend and barstate.isconfirmed
+    strategy.close_all(comment = 'cr_trend__exit')
+    alert(pineconnectorLicenseID + ',closeshort,' + pineconnectorInputSymbol)
+
+
+
+
+
+
+// https://www.tradingview.com/script/sDPe1PDd-Vervoort-Smoothed-b-LazyBear/
+
+vvbb_calc_tema(s, length) =>
+    ema1 = ta.ema(s, length)
+    ema2 = ta.ema(ema1, length)
+    ema3 = ta.ema(ema2, length)
+    3 * (ema1 - ema2) + ema3
+
+vvbb_length = input.int(18, minval=2, maxval=100, title='vvbb %B Length', group = 'VVBB', inline = 'vvbb')
+vvbb_temaLength = input.int(8, title='TEMA Length', group = 'VVBB', inline = 'vvbb')
+vvbb_stdevHigh = input.float(1.4, title='vvbb Stdev High', group = 'VVBB', inline = 'vvbb', step = 0.1)
+vvbb_stdevLow = input.float(1.4, title='vvbb Stdev Low', group = 'VVBB', inline = 'vvbb', step = 0.1)
+vvbb_stdevLength = input.int(44, title='vvbb Stdev Length', group = 'VVBB', inline = 'vvbb')
+
+vvbb_openHA = request.security(ticker.heikinashi(syminfo.tickerid), timeframe.period, open)
+vvbb_haOpen = (ohlc4[1] + nz(vvbb_openHA[1])) / 2
+vvbb_haC = (ohlc4 + vvbb_haOpen + math.max(high, vvbb_haOpen) + math.min(low, vvbb_haOpen)) / 4
+
+vvbb_tma1 = vvbb_calc_tema(vvbb_haC, vvbb_temaLength)
+vvbb_tma2 = vvbb_calc_tema(vvbb_tma1, vvbb_temaLength)
+vvbb_diff = vvbb_tma1 - vvbb_tma2
+vvbb_zlha = vvbb_tma1 + vvbb_diff
+vvbb_percb = (vvbb_calc_tema(vvbb_zlha, vvbb_temaLength) + 2 * ta.stdev(vvbb_calc_tema(vvbb_zlha, vvbb_temaLength), vvbb_length) - ta.wma(vvbb_calc_tema(vvbb_zlha, vvbb_temaLength), vvbb_length)) / (4 * ta.stdev(vvbb_calc_tema(vvbb_zlha, vvbb_temaLength), vvbb_length)) * 100
+
+// plot(percb, linewidth=2, color=color.new(color.maroon, 0), title='SVE %b')
+// vvbb_longs_allowed = vvbb_percb <= vvbb_longs_limit and barstate.isconfirmed
+// vvbb_shorts_allowed = vvbb_percb >= vvbb_short_limit and barstate.isconfirmed
+
+vvbb_ub = 50 + vvbb_stdevHigh * ta.stdev(vvbb_percb, vvbb_stdevLength)
+vvbb_lb = 50 - vvbb_stdevLow * ta.stdev(vvbb_percb, vvbb_stdevLength)
+
+vvbb_shorts_exit = vvbb_percb <= vvbb_lb and barstate.isconfirmed
+vvbb_longs_exit = vvbb_percb >= vvbb_ub and barstate.isconfirmed
+
+use_vvbb_exit = input.bool(true, 'Use vvbb exit?')
+
+if use_vvbb_exit and isLong() and vvbb_longs_exit and barstate.isconfirmed
+    strategy.close_all(comment = 'vvbb__exit')
+    alert(pineconnectorLicenseID + ',closelong,' + pineconnectorInputSymbol)
+if use_vvbb_exit and isShort() and vvbb_shorts_exit and barstate.isconfirmed
+    strategy.close_all(comment = 'vvbb__exit')
+    alert(pineconnectorLicenseID + ',closeshort,' + pineconnectorInputSymbol)
+
+
+
+
+
+
+
+
+
+
+useGreedFearExit = input.bool(true, 'Use Greed Fear exit?')
+
+if useGreedFearExit and isLong() and greedZoneCondition and barstate.isconfirmed
+    strategy.close_all(comment = 'expo__exit')
+    alert(pineconnectorLicenseID + ',closelong,' + pineconnectorInputSymbol)
+if useGreedFearExit and isShort() and fearZoneCondition and barstate.isconfirmed
+    strategy.close_all(comment = 'expo__exit')
+    alert(pineconnectorLicenseID + ',closeshort,' + pineconnectorInputSymbol)
+
+
+
+
+
+
+
+
+useSupertrendChangeExit = input.bool(true, 'Use Supertrend Change exit?')
+
+if useSupertrendChangeExit and supertrend_trend != supertrend_trend[1] and isLong() and barstate.isconfirmed
+    strategy.close_all(comment = 'supertrend__exit')
+    alert(pineconnectorLicenseID + ',closelong,' + pineconnectorInputSymbol)
+if useSupertrendChangeExit and supertrend_trend != supertrend_trend[1] and isShort() and barstate.isconfirmed
+    strategy.close_all(comment = 'supertrend__exit')
+    alert(pineconnectorLicenseID + ',closelong,' + pineconnectorInputSymbol)
+
+
+
+
+
+
+
+
+// PLOT PLOT PLOT
+
+p1hma = plot(a, color=color.new(c, 75), linewidth=1, title='Long Plot')
+p2hma = plot(b, color=color.new(c, 75), linewidth=1, title='Short Plot')
+fill(p1hma, p2hma, color=color.new(c, 55), title='Fill')
+
+
+possible_long_entry_color = longEntrySignal ? color.new(#2b672d, 0) : color.new(#56c159, 30)
+possible_short_entry_color = shortEntrySignal ? color.new(#662027, 0) : color.new(#d24a61, 30)
+
+plotshape(showcross and crossdn ? a : na, location=location.abovebar, style=shape.labeldown, color=possible_short_entry_color , size=size.tiny, text='Sell', textcolor=color.new(color.white, 0))
+plotshape(showcross and crossup ? a : na, location=location.belowbar, style=shape.labelup, color=possible_long_entry_color, size=size.tiny, text='Buy', textcolor=color.new(color.white, 0))
+
+
+
+
+
+
+
+
+// supertrend_show = true
+
+// supertrend_upPlot = plot(supertrend_trend == 1 and supertrend_show ? supertrend_up : na, title='Up Trend', style=plot.style_linebr, linewidth=2, color=color.new(color.green, 0))
+// supertrend_buySignal = supertrend_trend == 1 and supertrend_trend[1] == -1
+// plotshape(supertrend_buySignal and supertrend_show ? supertrend_up : na, title='UpTrend Begins', location=location.absolute, style=shape.circle, size=size.tiny, color=color.new(color.green, 0))
+// plotshape(supertrend_buySignal and supertrend_show ? supertrend_up : na, title='Buy', text='Buy', location=location.absolute, style=shape.labelup, size=size.tiny, color=color.new(color.green, 0), textcolor=color.new(color.white, 0))
+// supertrend_dnPlot = plot(supertrend_trend == 1 and supertrend_show ? na : supertrend_dn, title='Down Trend', style=plot.style_linebr, linewidth=2, color=color.new(color.red, 0))
+// supertrend_sellSignal = supertrend_trend == -1 and supertrend_trend[1] == 1
+// plotshape(supertrend_sellSignal and supertrend_show ? supertrend_dn : na, title='DownTrend Begins', location=location.absolute, style=shape.circle, size=size.tiny, color=color.new(color.red, 0))
+// plotshape(supertrend_sellSignal and supertrend_show ? supertrend_dn : na, title='Sell', text='Sell', location=location.absolute, style=shape.labeldown, size=size.tiny, color=color.new(color.red, 0), textcolor=color.new(color.white, 0))
+// supertrend_mPlot = plot(supertrend_show ? ohlc4 : na, title='', style=plot.style_circles, linewidth=0)
+// supertrend_longFillColor = supertrend_trend == 1 ? color.green : color.white
+// supertrend_shortFillColor = supertrend_trend == -1 ? color.red : color.white
+// fill(supertrend_mPlot, supertrend_upPlot, title='UpTrend Highligter', color=color.new(supertrend_longFillColor, 90))
+// fill(supertrend_mPlot, supertrend_dnPlot, title='DownTrend Highligter', color=color.new(supertrend_shortFillColor, 90))
