@@ -1,0 +1,67 @@
+Name,Value
+"__indicatorName","IDEAL trend v4 supertrend + CHANGE CR"
+"Pineconnector ID",6388198605013
+"Symbol (MT4/MT5)","GBPUSD"
+"Lots size",1.5
+"GreedZone Source1","open"
+"Low Period1",31
+"Stdev Period1",60
+"Use WMA instead of SMA?1",false
+"Draw Signals on chart?1",true
+"FearZone Source2","open"
+"High Period2",31
+"Stdev Period2",60
+"Use WMA instead of SMA?2",false
+"Draw on chart?2",true
+"Use Stochastic?",true
+"St Length",7
+"St SmoothK",3
+"St SmoothD",4
+"OB (shorts - above line)",30
+"OS (longs - below line)",70
+"Stochastic Timeframe","5 minutes"
+"Price Data","hl2"
+"Lookback",13
+"Show cross over/under",true
+"Gain",7000
+"Use Kahlman",true
+"Vix upper limit",30
+"Cr source","high"
+"Cr lenght",11
+"Supertrend_ATR Period",6
+"Supertrend_Source","ohlc4"
+"Supertrend_ATR Multiplier",2
+"Change supertrend_ATR Calculation Method ?",true
+"Enable trades?",true
+"Use Percentages for SL & TP",true
+"Stop Loss (points)",8
+"Take Profit (points)",16
+"Stop Loss (%)",0.07
+"Take Profit (%)",0.095
+"Vvb source","close"
+"Al",7
+"Vl",13
+"Df",3.2
+"Lba",1.2
+"Leledc length",16
+"Leledc bars",10
+"HVP",12
+"LVP",3
+"MR1",1
+"MR2",1
+"Use VVB exit?",false
+"Use Tom Demark exit?",false
+"TD Exit strength",12
+"Fisher Transform Length",17
+"Fisher EMA Length",33
+"Use Fisher exit?",false
+"Fisher Exit N bar since entry:",20
+"Use CR trend change?",false
+"Vvbb %B Length",12
+"TEMA Length",7
+"Vvbb Stdev High",1.5
+"Vvbb Stdev Low",1.5
+"Vvbb Stdev Length",77
+"Use vvbb exit?",false
+"Use Greed Fear exit?",true
+"Use Supertrend Change exit?",true
