@@ -1,0 +1,140 @@
+//@version=5
+strategy('Pivot Point Reversal _ MNQ', overlay=true, default_qty_value = 2, initial_capital = 10000)
+
+////////////
+// Inputs //
+
+pineconnectorLicenseID = input.string(title='Pineconnector License ID', defval='6388198605013', group='Pineconnector Alert Settings')
+pineconnectorInputSymbol = input.string(title='Symbol for close alert (MT4/MT5)', defval='EURUSD', group='Pineconnector Alert Settings')
+pineconnectorVolume = input.float(0.4, 'Volume (lots size)', minval=0.0, step=0.1, group='Pineconnector Alert Settings')
+
+// Inputs
+inpTakeProfit = input.int(defval=130, title='Take Profit (ticks)', minval=0, group="SL & TP Strategy Settings")
+inpStopLoss = input.int(defval=70, title='Stop Loss (ticks)', minval=0, group="SL & TP Strategy Settings")
+
+leftBars = input(3, title='PP - Left Bars')
+rightBars = input(3, title='PP - Right Bars')
+rsi_length = input(14, title='RSI - Length')
+rsi_long = input(70, title='RSI - Overbought level')
+rsi_short = input(30, title='RSI - Overold level')
+
+//////////////////
+// Calculations //
+
+// Pivot Points
+swh = ta.pivothigh(leftBars, rightBars)
+swl = ta.pivotlow(leftBars, rightBars)
+
+// Pivot High 
+swh_cond = not na(swh) and barstate.isconfirmed
+
+hprice = 0.0
+hprice := swh_cond ? swh : hprice[1]
+
+le = false
+le := swh_cond ? true : le[1] and close[1] > hprice and barstate.isconfirmed ? false : le[1] and barstate.isconfirmed
+
+// Pivot Low 
+swl_cond = not na(swl) and barstate.isconfirmed
+
+lprice = 0.0
+lprice := swl_cond ? swl : lprice[1]
+
+se = false
+se := swl_cond ? true : se[1] and close[1] < lprice and barstate.isconfirmed ? false : se[1] and barstate.isconfirmed
+
+// RSI 
+rsi = ta.rsi(close, rsi_length)
+
+
+
+
+// functions
+isLong() =>
+    strategy.position_size > 0
+
+isShort() =>
+    strategy.position_size < 0
+    
+
+
+hardStopLossCalculated = inpStopLoss
+hardTakeProfitCalculated = inpTakeProfit
+
+sl_multiplier = 1.03
+tp_multiplier = 1.2
+trailtrig_multiplier = 1.03
+pineconnectorPriceDivider = input.float(10, 'Pineconnector Price divider')
+
+pineconnectorAlertForEntry(direction) =>
+     pineconnectorLicenseID +
+     ',' + direction +
+     ',' + pineconnectorInputSymbol +
+     ',sl=' + str.tostring( math.round( math.abs(hardStopLossCalculated) * sl_multiplier ) / pineconnectorPriceDivider ) +
+     ',tp=' + str.tostring( math.round( math.abs(hardTakeProfitCalculated) * tp_multiplier ) / pineconnectorPriceDivider ) +
+     ',risk=' + str.tostring(pineconnectorVolume) +
+     ',trailtrig=' + str.tostring( math.round( math.abs(hardTakeProfitCalculated) * trailtrig_multiplier ) / pineconnectorPriceDivider ) + 
+     ',traildist=' + str.tostring( math.round( math.abs(hardTakeProfitCalculated) * sl_multiplier ) / pineconnectorPriceDivider / 10 ) + 
+     ',trailstep=' + str.tostring( math.round( math.abs(hardTakeProfitCalculated) * sl_multiplier ) / pineconnectorPriceDivider / 10 )
+
+pineconnectorAlertForExitAll() =>
+     pineconnectorLicenseID +
+     ',closelongshort' +
+     ',' + pineconnectorInputSymbol
+
+lastEntryPrice = strategy.opentrades.entry_price(strategy.opentrades - 1)
+is_current_trade_is_loosing = isLong() ? (lastEntryPrice > close) : (isShort() ? (lastEntryPrice < close) : false)
+
+// is_losing_exit_is_allowed = useEarlyExitWithLosses ? true : not is_current_trade_is_loosing
+
+
+//////////////
+// STRATEGY //
+
+if le and rsi[rightBars] < rsi_long and not isLong() and barstate.isconfirmed
+    alert(pineconnectorAlertForEntry('buy'))
+    strategy.entry('LONG', strategy.long, comment='PivRSI Long', stop = hprice + syminfo.mintick, alert_message = pineconnectorAlertForEntry('buy'))
+
+strategy.exit('LONGExit', from_entry='LONG', profit=hardTakeProfitCalculated)
+
+
+
+
+if se and rsi[rightBars] > rsi_short and not isShort() and  barstate.isconfirmed
+    alert(pineconnectorAlertForEntry('sell'))
+    strategy.entry('SHORT', strategy.short, comment='PivRSI Short', stop = lprice - syminfo.mintick, alert_message = pineconnectorAlertForEntry('sell'))
+
+strategy.exit('SHORTExit', from_entry='SHORT', profit=hardTakeProfitCalculated, loss=hardStopLossCalculated, alert_message = pineconnectorAlertForExitAll())
+
+
+
+
+
+
+
+longTP = lastEntryPrice + math.round( math.abs(hardTakeProfitCalculated ) ) / pineconnectorPriceDivider / 10
+longSL = lastEntryPrice - math.round( math.abs(hardStopLossCalculated) ) / pineconnectorPriceDivider / 10
+
+shortTP = lastEntryPrice - math.round( math.abs( hardTakeProfitCalculated ) ) / pineconnectorPriceDivider / 10
+shortSL = lastEntryPrice + math.round( math.abs(hardStopLossCalculated) ) / pineconnectorPriceDivider / 10
+
+//Stop Selector
+SL = isLong() ? longSL : (isShort() ? shortSL : na)
+TP = isLong() ? longTP : (isShort() ? shortTP : na)
+
+// Plot take profit values for confirmation (for 'long' trades)
+plot(series=isLong() ? TP : na, color=color.green, style=plot.style_linebr, linewidth=2, title="Long TP")
+plot(series=isLong() ? SL : na, color=color.red,   style=plot.style_linebr, linewidth=2, title="Long SL")
+
+// Plot take profit values for confirmation (for 'short' trades)
+plot(series=isShort() ? TP : na, color=color.green,   style=plot.style_linebr, linewidth=2, title="Short TP")
+plot(series=isShort() ? SL : na, color=color.red,     style=plot.style_linebr, linewidth=2, title="Short SL")
+
+plot(isLong() or isShort() ? lastEntryPrice : na, color=color.blue, style=plot.style_linebr, linewidth=2, title="Entry price")
+
+
+
+infobox = table.new("top_right", 2, 3, bgcolor = #faedf5, frame_color = #C84DF5, frame_width = 1)
+table.cell(infobox, 0, 0, text = "TP: " + str.tostring(hardTakeProfitCalculated),   text_color = color.black, text_size = size.small)
+table.cell(infobox, 0, 1, text = "SL: " + str.tostring(hardStopLossCalculated),    text_color = color.black, text_size = size.small)
+table.cell(infobox, 0, 2, text = "Example: " + str.tostring(pineconnectorAlertForEntry('buy')),   text_color = color.black, text_size = size.small)
