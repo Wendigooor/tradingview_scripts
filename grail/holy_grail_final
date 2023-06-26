@@ -1,0 +1,201 @@
+// https://www.tradingview.com/script/Mc2wPUg2-Pinescript-v4-The-Holy-Grail-Trailing-Stop/
+//@version=5
+strategy(
+     'The Holy Grail FINAL',
+     overlay=true,
+     default_qty_value=10000,
+     initial_capital=5000, 
+     currency=currency.USD,  
+     calc_on_every_tick=true)
+
+
+
+// MovAvgType() returns the specified moving average type with 
+// the given length and data source. Shows an error on the chart
+// when the given moving average type is unknown to the function.
+MovAvgType(averageType, averageSource, averageLength) =>
+	switch str.upper(averageType)
+        "SMA"  => ta.sma(averageSource, averageLength)
+        "EMA"  => ta.ema(averageSource, averageLength)
+        "WMA"  => ta.wma(averageSource, averageLength)
+        "HMA"  => ta.hma(averageSource, averageLength)
+        "RMA"  => ta.rma(averageSource, averageLength)
+        "SWMA" => ta.swma(averageSource)
+        "ALMA" => ta.alma(averageSource, averageLength, 0.85, 6)
+        "VWMA" => ta.vwma(averageSource, averageLength)
+        "VWAP" => ta.vwap(averageSource)
+        => runtime.error("Moving average type '" + averageType + 
+             "' not found!"), na
+
+
+usePercentages = input.bool(false, 'Use Percentages for SL?', group = 'Main %')
+slPerc = input.float(title='Stop Loss Trail Percentage', minval = 0.0, step=0.05, defval = 0.2, group = 'Main %')
+slOffsetPerc = input.float(title='Stop Loss Trail Offset Percentage', minval = 0.0, step=0.05, defval = 0.0, group = 'Main %')
+slHardPerc = input.float(title = 'Hard SL perc(%)', defval = 0.15, step = 0.05, minval=0.0, group = 'Main %')
+
+// User Input
+slPoints = input.int(title='Stop Loss Trail', minval=1, maxval=10000, step=1, defval=120, group = 'Main')
+slOffset = input.int(title='Stop Loss Trail Offset', minval=1, maxval=10000, step=1, defval=1, group = 'Main')
+slHardPoints = input.int(title='Hard Stop Loss', minval=1, maxval=10000, step=1, defval=110, group = 'Main')
+
+plot_everything = false // input.bool(false, 'Draw smth on chart?')
+pinbarConfirmationValue = input.float(title = 'Pinbar confirmation value', minval = 0.0, defval = 0.3, step=0.01, group = 'Main')
+
+sma_slow = input.int(title='Slow SMA (Period)', minval=1, maxval=500, step=1, defval=140, group = 'MA')
+ema_medm = input.int(title='Medm EMA (Period)', minval=1, maxval=500, step=1, defval=10, group = 'MA')
+ema_fast = input.int(title='Fast EMA (Period)', minval=1, maxval=500, step=1, defval=6, group = 'MA')
+
+slow_ma_type = input.string('SMA', 'slow MA Type', options=['SMA', 'EMA', 'HMA', 'RMA', 'WMA', 'SWMA', 'ALMA', 'VWMA', 'VWAP'], group = 'MA')
+medm_ma_type = input.string('EMA', 'medm MA Type', options=['SMA', 'EMA', 'HMA', 'RMA', 'WMA', 'SWMA', 'ALMA', 'VWMA', 'VWAP'], group = 'MA')
+fast_ma_type = input.string('EMA', 'fast MA Type', options=['SMA', 'EMA', 'HMA', 'RMA', 'WMA', 'SWMA', 'ALMA', 'VWMA', 'VWAP'], group = 'MA')
+
+
+
+sl_multiplier = input.float(1.04, 'SL mult', step = 0.01, group = 'mult', inline = 'mult')
+tp_multiplier = input.float(1.35, 'TP mulp', step = 0.01, group = 'mult', inline = 'mult')
+trailtrig_multiplier = input.float(1.1, 'Trailtrig mult', step = 0.01, group = 'mult', inline = 'mult')
+
+
+useStochasticAsFilter = input.bool(defval=false, title="Use Stochastic as Filter (OB/OS)?", group = 'Stochastic')
+// stochasticSource = input.source(defval=close, title="Source", group = 'Stochastic')
+// stochasticTF = input.timeframe('5', "sRSI 1", options = ['1','3','5','15','30','45','60','120','240','480','D','2D','W','2W','M','2M','4M'], group = 'Stochastic')
+
+len = input.int(14, minval=1, title="Length for Main Stochastic") 
+smoothK = input.int(3, minval=1, title="SmoothK for Main Stochastic")
+smoothD = input.int(3, minval=1, title="SmoothD for Main Stochastic")
+upLine = input.int(30, minval=0, step=5, maxval=100, title="Upper Line Value? (shorts - above line)")
+lowLine = input.int(50, minval=0, step=5, maxval=100, title="Lower Line Value? (longs - below line)")
+
+useCurrentRes = input.bool(true, title="Use Current Chart Resolution?")
+resCustom = input.timeframe(title="Use Different Timeframe? Uncheck Box Above", defval="12")
+
+//Stoch formula
+k = ta.sma(ta.stoch(close, high, low, len), smoothK)
+d = ta.sma(k, smoothD)
+outK = request.security(syminfo.tickerid, resCustom, k)
+outD = request.security(syminfo.tickerid, resCustom, d)
+
+//definitions for Cross
+aboveLine = useStochasticAsFilter ? (outK > upLine and barstate.isconfirmed ? 1 : 0) : 1
+belowLine = useStochasticAsFilter ? (outK < lowLine and barstate.isconfirmed ? 1 : 0) : 1
+
+// Create Indicators
+// slowSMA = ta.sma(close, sma_slow)
+// medmEMA = ta.ema(close, ema_medm)
+// fastEMA = ta.ema(close, ema_fast)
+
+slowSMA = MovAvgType(slow_ma_type, close, sma_slow)
+medmEMA = MovAvgType(medm_ma_type, close, ema_medm)
+fastEMA = MovAvgType(fast_ma_type, close, ema_fast)
+
+
+bullishPinBar = close > open and open - low > pinbarConfirmationValue * (high - low) or close < open and close - low > pinbarConfirmationValue * (high - low) and barstate.isconfirmed
+bearishPinBar = close > open and high - close > pinbarConfirmationValue * (high - low) or close < open and high - open > pinbarConfirmationValue * (high - low) and barstate.isconfirmed
+
+// Specify Trend Conditions
+fanUpTrend = fastEMA > medmEMA and medmEMA > slowSMA and barstate.isconfirmed
+fanDnTrend = fastEMA < medmEMA and medmEMA < slowSMA and barstate.isconfirmed
+
+// Specify Piercing Conditions
+bullPierce = low < fastEMA and open > fastEMA and close > fastEMA or low < medmEMA and open > medmEMA and close > medmEMA or low < slowSMA and open > slowSMA and close > slowSMA and barstate.isconfirmed
+bearPierce = high > fastEMA and open < fastEMA and close < fastEMA or high > medmEMA and open < medmEMA and close < medmEMA or high > slowSMA and open < slowSMA and close < slowSMA and barstate.isconfirmed
+
+// Specify Entry Conditions
+longEntry = fanUpTrend and bullishPinBar and bullPierce and barstate.isconfirmed
+shortEntry = fanDnTrend and bearishPinBar and bearPierce and barstate.isconfirmed
+
+pineconnectorLicenseID = input.string(title='Pineconnector License ID', defval='6388198605013', group='Pineconnector Alert Settings', inline = 'Pineconnector Alert Settings')
+pineconnectorInputSymbol = input.string(title='Symbol for close alert (MT4/MT5)', defval='EURUSD', group='Pineconnector Alert Settings', inline = 'Pineconnector Alert Settings')
+pineconnectorVolume = input.float(0.4, 'Volume (lots size)', minval=0.0, step=0.1, group='Pineconnector Alert Settings', inline = 'Pineconnector Alert Settings')
+
+pineconnectorPriceDivider = input.float(10, 'Price divider (metatrader prices)',  group='Pineconnector Alert Settings', inline = 'Pineconnector Alert Settings')
+
+strTicksToPips(ticks) =>
+    str.tostring(ticks * syminfo.mintick)
+
+
+trailStopLossCalculated = usePercentages ? math.round(slPerc * close) : slPoints
+hardStopLossCalculated = usePercentages ? math.round(slHardPerc * close) : slHardPoints
+
+// alert(licenseID + ',buy,' + inputSymbol + ',sl=' + str.tostring(StopLoss) + ',tp=' + str.tostring(TakeProfit) + ',risk=' + str.tostring(Volume))
+pineconnectorAlertForEntry(direction) =>
+     pineconnectorLicenseID +
+     ',' + direction +
+     ',' + pineconnectorInputSymbol +
+     ',sl=' + str.tostring( math.round( math.abs(hardStopLossCalculated) * sl_multiplier / pineconnectorPriceDivider ) ) +
+     ',tp=' + str.tostring( math.round( math.abs(trailStopLossCalculated) * tp_multiplier / pineconnectorPriceDivider ) ) +
+     ',risk=' + str.tostring(pineconnectorVolume) +
+     ',trailtrig=' + str.tostring( math.round( math.abs(trailStopLossCalculated) * trailtrig_multiplier / pineconnectorPriceDivider ) ) + 
+     ',traildist=' + str.tostring( math.round( math.abs(trailStopLossCalculated) * sl_multiplier / pineconnectorPriceDivider / 10 ) ) + 
+     ',trailstep=' + str.tostring( math.round( math.abs(trailStopLossCalculated) * sl_multiplier / pineconnectorPriceDivider / 10 ) )
+
+pineconnectorAlertForExitAll() =>
+     pineconnectorLicenseID +
+     ',closelongshort' +
+     ',' + pineconnectorInputSymbol
+
+//  ',betrigger=' + strTicksToPips(slPoints)
+
+// Long Entry Function
+enterlong() =>
+    strategy.entry('long', strategy.long, alert_message = pineconnectorAlertForEntry('buy'))
+    alert(pineconnectorAlertForEntry('buy'))
+    strategy.exit('exit long', from_entry='long', loss=hardStopLossCalculated, trail_points=trailStopLossCalculated, trail_offset=slOffset, alert_message = pineconnectorAlertForExitAll())
+
+// Short Entry Function
+entershort() =>
+    strategy.entry('short', strategy.short, alert_message = pineconnectorAlertForEntry('sell'))
+    alert(pineconnectorAlertForEntry('sell'))
+    strategy.exit('exit short', from_entry='short', loss=hardStopLossCalculated, trail_points=trailStopLossCalculated, trail_offset=slOffset, alert_message = pineconnectorAlertForExitAll())
+
+isLong() => strategy.position_size > 0
+isShort() => strategy.position_size < 0
+
+// Execute Long Entry
+if longEntry and not isLong() and not isShort() and belowLine and barstate.isconfirmed
+    strategy.entry('long', strategy.long, alert_message = pineconnectorAlertForEntry('buy'))
+    alert(pineconnectorAlertForEntry('buy'))
+    strategy.exit('exit long', from_entry='long', loss=hardStopLossCalculated, trail_points=trailStopLossCalculated, trail_offset=slOffset, alert_message = pineconnectorAlertForExitAll())
+
+// Execute Short Entry
+if shortEntry and not isLong() and not isShort() and aboveLine and barstate.isconfirmed
+    strategy.entry('short', strategy.short, alert_message = pineconnectorAlertForEntry('sell'))
+    alert(pineconnectorAlertForEntry('sell'))
+    strategy.exit('exit short', from_entry='short', loss=hardStopLossCalculated, trail_points=trailStopLossCalculated, trail_offset=slOffset, alert_message = pineconnectorAlertForExitAll())
+
+
+
+
+lastEntryPrice = strategy.opentrades.entry_price(strategy.opentrades - 1)
+is_current_trade_is_loosing = isLong() ? (lastEntryPrice > close) : (isShort() ? (lastEntryPrice < close) : false)
+
+
+
+
+
+longTP = lastEntryPrice + math.round( math.abs(trailStopLossCalculated ) ) / pineconnectorPriceDivider / 10
+longSL = lastEntryPrice - math.round( math.abs(hardStopLossCalculated) ) / pineconnectorPriceDivider / 10
+
+shortTP = lastEntryPrice - math.round( math.abs( trailStopLossCalculated ) ) / pineconnectorPriceDivider / 10
+shortSL = lastEntryPrice + math.round( math.abs(hardStopLossCalculated) ) / pineconnectorPriceDivider / 10
+
+//Stop Selector
+SL = isLong() ? longSL : (isShort() ? shortSL : na)
+TP = isLong() ? longTP : (isShort() ? shortTP : na)
+
+// Plot take profit values for confirmation (for 'long' trades)
+plot(series=isLong() ? TP : na, color=color.green, style=plot.style_linebr, linewidth=2, title="Long TP")
+plot(series=isLong() ? SL : na, color=color.red,   style=plot.style_linebr, linewidth=2, title="Long SL")
+
+// Plot take profit values for confirmation (for 'short' trades)
+plot(series=isShort() ? TP : na, color=color.green,   style=plot.style_linebr, linewidth=2, title="Short TP")
+plot(series=isShort() ? SL : na, color=color.red,     style=plot.style_linebr, linewidth=2, title="Short SL")
+
+plot(isLong() or isShort() ? lastEntryPrice : na, color=color.blue, style=plot.style_linebr, linewidth=2, title="Entry price")
+
+
+
+infobox = table.new("top_right", 2, 3, bgcolor = #faedf5, frame_color = #C84DF5, frame_width = 1)
+table.cell(infobox, 0, 0, text = "SL: " + str.tostring(hardStopLossCalculated),   text_color = color.black, text_size = size.small)
+table.cell(infobox, 0, 1, text = "Trail SL: " + str.tostring(trailStopLossCalculated),    text_color = color.black, text_size = size.small)
+table.cell(infobox, 0, 2, text = "Example: " + str.tostring(pineconnectorAlertForEntry('buy')),   text_color = color.black, text_size = size.small)
