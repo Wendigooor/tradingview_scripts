@@ -36,11 +36,21 @@ namespace NinjaTrader.NinjaScript.Strategies
 		private double low;
 		private double high;
 		
+		private double slowSMA;
+		private double medmEMA;
+		private double fastEMA;
+		
 		private bool bullishPinBar;
 		private bool bearishPinBar;
 		
 		private bool fanUpTrend;
 		private bool fanDnTrend;
+		
+		private bool bullPierce;
+		private bool bearPierce;
+		
+		private bool longEntry;
+		private bool shortEntry;
 		
 		protected override void OnStateChange()
 		{
@@ -73,6 +83,15 @@ namespace NinjaTrader.NinjaScript.Strategies
 				
 				pinbarConfirmationValue = 0.24;
 				
+				profitTaker = 22;
+				stopLoss = 26;
+				trailingStopLoss = 20;
+			}
+			else if (State == State.Configure)
+			{
+				SetStopLoss(CalculationMode.Ticks, stopLoss);
+				SetProfitTarget(CalculationMode.Ticks, profitTaker);
+				//SetTrailStop(CalculationMode.Ticks, trailingStopLoss);
 			}
 			else if (State == State.DataLoaded)
 			{
@@ -99,6 +118,10 @@ namespace NinjaTrader.NinjaScript.Strategies
 			maMedium = EMA(Medium);
 			maFast = EMA(Fast);
 			
+			slowSMA = maSlow[0];
+			medmEMA = maMedium[0];
+			fastEMA = maFast[0];
+			
 			open = Open[0];
 			close = Close[0];
 			low = Low[0];
@@ -107,8 +130,20 @@ namespace NinjaTrader.NinjaScript.Strategies
 			bullishPinBar = close > open && open - low > pinbarConfirmationValue * (high - low) || close < open && close - low > pinbarConfirmationValue * (high - low);
 			bearishPinBar = close > open && high - close > pinbarConfirmationValue * (high - low) || close < open && high - open > pinbarConfirmationValue * (high - low);
 
-			fanUpTrend = maFast[0] > maMedium[0] && maMedium[0] > maSlow[0];
-			fanDnTrend = maFast[0] < maMedium[0] && maMedium[0] < maSlow[0];
+			fanUpTrend = fastEMA > medmEMA && medmEMA > slowSMA;
+			fanDnTrend = fastEMA < medmEMA && medmEMA < slowSMA;
+			
+			bullPierce = low < fastEMA && open > fastEMA && close > fastEMA || low < medmEMA && open > medmEMA && close > medmEMA || low < slowSMA && open > slowSMA && close > slowSMA;
+			bearPierce = high > fastEMA && open < fastEMA && close < fastEMA || high > medmEMA && open < medmEMA && close < medmEMA || high > slowSMA && open < slowSMA && close < slowSMA;
+
+			longEntry = fanUpTrend && bullishPinBar && bullPierce;
+			shortEntry = fanDnTrend && bearishPinBar && bearPierce;
+			
+			if (longEntry)
+				EnterLong();
+			
+			if (shortEntry)
+				EnterShort();
 		}
 		
 		
@@ -133,6 +168,25 @@ namespace NinjaTrader.NinjaScript.Strategies
 		[Display(ResourceType = typeof(Custom.Resource), Name = "Pinbar Confirmation Value", GroupName = "NinjaScriptStrategyParameters", Order = 3)]
 		public double pinbarConfirmationValue
 		{ get; set; }
+		
+		[NinjaScriptProperty]
+		[Range(2, 1024)]
+		[Display(Name="Profit Taker", Description="Take Profit Ticks", Order=9, GroupName="Parameters")]
+		public int profitTaker
+		{ get; set; }			
+			
+		[NinjaScriptProperty]
+		[Range(1, 1024)]
+		[Display(Name="Stop Loss", Description="Stop Loss Ticks", Order=10, GroupName="Parameters")]
+		public int stopLoss
+		{ get; set; }			
+			
+		[NinjaScriptProperty]
+		[Range(1, 1024)]
+		[Display(Name="Trailing Stop Loss", Description="Trailing Stop Loss Ticks", Order=11, GroupName="Parameters")]
+		public int trailingStopLoss
+		{ get; set; }
 		#endregion
-	}
+		
+		}
 }
