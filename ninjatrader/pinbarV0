@@ -25,7 +25,7 @@ using NinjaTrader.NinjaScript.DrawingTools;
 //This namespace holds Strategies in this folder and is required. Do not change it. 
 namespace NinjaTrader.NinjaScript.Strategies
 {
-	public class PinBarV0 : Strategy
+	public class PinBarV1WithProfitTrail : Strategy
 	{
 		private SMA maSlow;
 		private EMA maMedium;
@@ -57,7 +57,7 @@ namespace NinjaTrader.NinjaScript.Strategies
 			if (State == State.SetDefaults)
 			{
 				Description									= @"Enter the description for your new custom Strategy here.";
-				Name										= "PinBarV0";
+				Name										= "PinBarV1WithProfitTrail";
 				Calculate									= Calculate.OnBarClose;
 				EntriesPerDirection							= 1;
 				EntryHandling								= EntryHandling.AllEntries;
@@ -83,14 +83,15 @@ namespace NinjaTrader.NinjaScript.Strategies
 				
 				pinbarConfirmationValue = 0.24;
 				
-				profitTaker = 22;
-				stopLoss = 26;
-				trailingStopLoss = 20;
+				profitTargetTicks = 22;
+				stopLossTicks = 26;
+				//trailingStopLossTicks = 20;
+				profitTrailOffsetTicks = 4;
 			}
 			else if (State == State.Configure)
 			{
-				SetStopLoss(CalculationMode.Ticks, stopLoss);
-				SetProfitTarget(CalculationMode.Ticks, profitTaker);
+				SetStopLoss(CalculationMode.Ticks, stopLossTicks);
+				//SetProfitTarget(CalculationMode.Ticks, profitTaker);
 				//SetTrailStop(CalculationMode.Ticks, trailingStopLoss);
 			}
 			else if (State == State.DataLoaded)
@@ -111,6 +112,15 @@ namespace NinjaTrader.NinjaScript.Strategies
 
 		protected override void OnBarUpdate()
 		{
+			if (Position.MarketPosition != MarketPosition.Flat) {
+    			if (Position.GetUnrealizedProfitLoss(PerformanceUnit.Ticks, Close[0]) > profitTargetTicks) {
+        			SetStopLoss(CalculationMode.Ticks, profitTrailOffsetTicks);
+				}
+			}
+			
+			
+			
+			
 			if (CurrentBar < BarsRequiredToTrade)
 				return;
 			
@@ -171,20 +181,20 @@ namespace NinjaTrader.NinjaScript.Strategies
 		
 		[NinjaScriptProperty]
 		[Range(2, 1024)]
-		[Display(Name="Profit Taker", Description="Take Profit Ticks", Order=9, GroupName="Parameters")]
-		public int profitTaker
+		[Display(Name="Profit Trail Trigger Ticks", Description="Take Profit Ticks", Order=9, GroupName="Parameters")]
+		public int profitTargetTicks
 		{ get; set; }			
 			
 		[NinjaScriptProperty]
 		[Range(1, 1024)]
-		[Display(Name="Stop Loss", Description="Stop Loss Ticks", Order=10, GroupName="Parameters")]
-		public int stopLoss
+		[Display(Name="Stop Loss Ticks", Description="Stop Loss Ticks", Order=10, GroupName="Parameters")]
+		public int stopLossTicks
 		{ get; set; }			
 			
 		[NinjaScriptProperty]
 		[Range(1, 1024)]
-		[Display(Name="Trailing Stop Loss", Description="Trailing Stop Loss Ticks", Order=11, GroupName="Parameters")]
-		public int trailingStopLoss
+		[Display(Name="Profit Trail Offset Ticks", Description="Profit Trail Offset Ticks", Order=11, GroupName="Parameters")]
+		public int profitTrailOffsetTicks
 		{ get; set; }
 		#endregion
 		
