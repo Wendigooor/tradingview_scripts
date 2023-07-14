@@ -1,0 +1,103 @@
+
+input int TpPoints = 200;
+input int SlPoints = 200;
+input int TslPoints = 10;
+input int TslTriggerPoints = 15;
+
+
+CTrade         m_trade;                      // trading object
+
+
+void processPos(ulong &posTicket){
+   if(posTicket <= 0) return;
+   if(OrderSelect(posTicket)) return;
+   
+   CPositionInfo pos;
+
+   if(!pos.SelectByTicket(posTicket)){
+      posTicket = 0;
+      return;
+   }else{
+      if(pos.PositionType() == POSITION_TYPE_BUY){
+         double bid = SymbolInfoDouble(_Symbol,SYMBOL_BID);
+         
+         if(bid > pos.PriceOpen() + TslTriggerPoints * _Point){
+            double sl = bid - TslPoints * _Point;
+            sl = NormalizeDouble(sl,_Digits);
+            
+            if(sl > pos.StopLoss()){
+               m_trade.PositionModify(pos.Ticket(),sl,pos.TakeProfit());
+            }
+         }
+      }else if(pos.PositionType() == POSITION_TYPE_SELL){
+         double ask = SymbolInfoDouble(_Symbol,SYMBOL_ASK);
+         
+         if(ask < pos.PriceOpen() - TslTriggerPoints * _Point){
+            double sl = ask + TslPoints * _Point;
+            sl = NormalizeDouble(sl,_Digits);
+
+            if(sl < pos.StopLoss() || pos.StopLoss() == 0){
+               m_trade.PositionModify(pos.Ticket(),sl,pos.TakeProfit());
+            }
+         }
+      }
+   }
+}
+
+
+
+void TrailingStop() {
+  for (int i = PositionsTotal() - 1; i >= 0; i--)
+    {
+        ulong ticket = PositionGetTicket(i);
+        if (ticket <= 0)
+        {
+            int Error = GetLastError();
+            Print("ERROR - Unable to select the position - ", Error);
+            break;
+        }
+
+        // Trading disabled.
+        if (SymbolInfoInteger(PositionGetString(POSITION_SYMBOL), SYMBOL_TRADE_MODE) == SYMBOL_TRADE_MODE_DISABLED) continue;
+        
+        // Filters.
+        if (PositionGetString(POSITION_SYMBOL) != Symbol()) continue;
+
+        processPos(ticket);
+   }
+}
+
+
+
+
+
+void executeBuy(double entry){
+   entry = NormalizeDouble(entry,_Digits);
+   double ask = SymbolInfoDouble(_Symbol,SYMBOL_ASK);
+   double tp = entry + TpPoints * _Point;
+   tp = NormalizeDouble(tp,_Digits);
+   double sl = entry - SlPoints * _Point;
+   sl = NormalizeDouble(sl,_Digits);
+   double lots = Lots;
+
+   trade.BuyStop(lots,entry,_Symbol,sl,tp,ORDER_TIME_SPECIFIED);
+}
+
+
+
+void executeSell(double entry){
+   entry = NormalizeDouble(entry,_Digits);  
+   double bid = SymbolInfoDouble(_Symbol,SYMBOL_BID);
+   double tp = entry - TpPoints * _Point;
+   tp = NormalizeDouble(tp,_Digits);
+   double sl = entry + SlPoints * _Point;
+   sl = NormalizeDouble(sl,_Digits);
+   double lots = Lots;
+
+   trade.SellStop(lots,entry,_Symbol,sl,tp,ORDER_TIME_SPECIFIED);
+}
+
+
+
+
+
