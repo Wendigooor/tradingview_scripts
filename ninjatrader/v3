@@ -1,0 +1,290 @@
+#region Using declarations
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.ComponentModel.DataAnnotations;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using System.Windows;
+using System.Windows.Input;
+using System.Windows.Media;
+using System.Xml.Serialization;
+using NinjaTrader.Cbi;
+using NinjaTrader.Gui;
+using NinjaTrader.Gui.Chart;
+using NinjaTrader.Gui.SuperDom;
+using NinjaTrader.Gui.Tools;
+using NinjaTrader.Data;
+using NinjaTrader.NinjaScript;
+using NinjaTrader.Core.FloatingPoint;
+using NinjaTrader.NinjaScript.Indicators;
+using NinjaTrader.NinjaScript.DrawingTools;
+#endregion
+
+//This namespace holds Strategies in this folder and is required. Do not change it. 
+namespace NinjaTrader.NinjaScript.Strategies
+{
+	public class PinBarV2ProfitTrailcontinue : Strategy
+	{
+		#region Variables
+		private SMA maSlow;
+		private EMA maMedium;
+		private EMA maFast;
+		
+		private double open;
+		private double close;
+		private double low;
+		private double high;
+		
+		private double slowSMA;
+		private double medmEMA;
+		private double fastEMA;
+		
+		private bool bullishPinBar;
+		private bool bearishPinBar;
+		
+		private bool fanUpTrend;
+		private bool fanDnTrend;
+		
+		private bool bullPierce;
+		private bool bearPierce;
+		
+		private bool longEntry;
+		private bool shortEntry;
+		
+		private double 	previousStopPrice		= 0;		// previous price used to calculate trailing stop
+		private double 	newStopPrice			= 0;		// Default setting for new price used to calculate trailing stop
+
+		private double profitTrailTriggerInPoints;
+		private double profitTrailOffsetInPoints;
+		
+		private bool profitTrailIsTriggered;
+		private bool newStopPriceIsBetter;
+		
+		private double  posAvgPrice;
+		
+		// Define variables
+private double profitTarget = 50; // Set the desired profit target in ticks
+//private double trailingStopLoss = 20; // Set the desired trailing stop loss value in ticks
+private double highestProfit = 0; // Tracks the highest profit reached
+private double trailStopPrice = 0; // Tracks the trailing stop loss price
+//private double profitTargetTicks = 22;
+//private double trailingStopLossTicks = 2;
+private double highestProfitTicks = 0;
+		
+		#endregion
+		
+		private int 	BarTraded 			= 0;
+		
+		protected override void OnStateChange()
+		{
+			if (State == State.SetDefaults)
+			{
+				Description									= @"Enter the description for your new custom Strategy here.";
+				Name										= "PinBarV2asd";
+				Calculate									= Calculate.OnBarClose;
+				EntriesPerDirection							= 1;
+				EntryHandling								= EntryHandling.AllEntries;
+				IsExitOnSessionCloseStrategy				= true;
+				ExitOnSessionCloseSeconds					= 30;
+				IsFillLimitOnTouch							= false;
+				MaximumBarsLookBack							= MaximumBarsLookBack.TwoHundredFiftySix;
+				OrderFillResolution							= OrderFillResolution.Standard;
+				Slippage									= 0;
+				StartBehavior								= StartBehavior.WaitUntilFlat;
+				TimeInForce									= TimeInForce.Gtc;
+				TraceOrders									= false;
+				RealtimeErrorHandling						= RealtimeErrorHandling.StopCancelClose;
+				StopTargetHandling							= StopTargetHandling.PerEntryExecution;
+				BarsRequiredToTrade							= 20;
+				// Disable this property for performance gains in Strategy Analyzer optimizations
+				// See the Help Guide for additional information
+				IsInstantiatedOnEachOptimizationIteration	= false;
+				
+				Slow		= 25;
+				Medium		= 10;
+				Fast		= 2;
+				
+				pinbarConfirmationValue = 0.1;
+				
+				//profitTargetTriggerTicks = 22;
+				stopLossTicks = 26;
+				//trailingStopLossTicks = 20;
+				//profitTrailOffsetTicks = 4;
+				profitTargetTicks = 22;
+				trailingStopLossTicks = 2;
+			}
+			else if (State == State.Configure)
+			{
+				SetStopLoss(CalculationMode.Ticks, stopLossTicks);
+				//SetProfitTarget(CalculationMode.Ticks, profitTaker);
+				//SetTrailStop(CalculationMode.Ticks, trailingStopLoss);
+			}
+			else if (State == State.DataLoaded)
+			{
+				#region init MA and add them to chart
+				maSlow = SMA(Slow);
+				maMedium = EMA(Medium);
+				maFast = EMA(Fast);
+
+				maSlow.Plots[0].Brush = Brushes.SeaGreen;
+				maMedium.Plots[0].Brush = Brushes.AliceBlue;
+				maFast.Plots[0].Brush = Brushes.Goldenrod;
+
+				AddChartIndicator(maSlow);
+				AddChartIndicator(maMedium);
+				AddChartIndicator(maFast);
+				#endregion
+			}
+		}
+
+		protected override void OnBarUpdate()
+		{
+			if (CurrentBar < BarsRequiredToTrade)
+				return;
+			
+			#region entry logic
+			maSlow = SMA(Slow);
+			maMedium = EMA(Medium);
+			maFast = EMA(Fast);
+			
+			slowSMA = maSlow[0];
+			medmEMA = maMedium[0];
+			fastEMA = maFast[0];
+			
+			open = Open[0];
+			close = Close[0];
+			low = Low[0];
+			high = High[0];
+					
+			bullishPinBar = close > open && open - low > pinbarConfirmationValue * (high - low) || close < open && close - low > pinbarConfirmationValue * (high - low);
+			bearishPinBar = close > open && high - close > pinbarConfirmationValue * (high - low) || close < open && high - open > pinbarConfirmationValue * (high - low);
+
+			fanUpTrend = fastEMA > medmEMA && medmEMA > slowSMA;
+			fanDnTrend = fastEMA < medmEMA && medmEMA < slowSMA;
+			
+			bullPierce = low < fastEMA && open > fastEMA && close > fastEMA || low < medmEMA && open > medmEMA && close > medmEMA || low < slowSMA && open > slowSMA && close > slowSMA;
+			bearPierce = high > fastEMA && open < fastEMA && close < fastEMA || high > medmEMA && open < medmEMA && close < medmEMA || high > slowSMA && open < slowSMA && close < slowSMA;
+
+			longEntry = fanUpTrend && bullishPinBar && bullPierce;
+			shortEntry = fanDnTrend && bearishPinBar && bearPierce;
+			
+			if (longEntry && Position.MarketPosition == MarketPosition.Flat && CurrentBar > BarTraded) {
+				EnterLong();
+				BarTraded = CurrentBar;
+			}
+			
+			if (shortEntry && Position.MarketPosition == MarketPosition.Flat && CurrentBar > BarTraded) {
+				EnterShort();
+				BarTraded = CurrentBar;
+			}
+			#endregion
+			
+			//enableAndEpdateTrailingStop(close);
+		}
+		
+		protected override void OnMarketData(MarketDataEventArgs marketDataUpdateEvent)
+ 		{
+   
+			enableAndEpdateTrailingStop(marketDataUpdateEvent.Price);
+			
+
+		}
+		
+		void enableAndEpdateTrailingStop(double currentPrice) {
+			if (Position.MarketPosition != MarketPosition.Flat) {
+		        double currentProfitTicks = Position.GetUnrealizedProfitLoss(PerformanceUnit.Ticks,currentPrice);
+
+		        // Convert profit target and trailing stop loss to ticks
+		        double profitTarget = profitTargetTicks * TickSize;
+		        double trailingStopLoss = trailingStopLossTicks * TickSize;
+
+		        // Check if the current position is in profit
+		        if (currentProfitTicks >= highestProfitTicks)
+		        {
+		            highestProfitTicks = currentProfitTicks;
+
+		            // Check if the profit target is reached
+		            if (currentProfitTicks >= profitTarget)
+		            {
+		                // Calculate the trailing stop loss price
+		                trailStopPrice = Position.MarketPosition == MarketPosition.Long ? currentPrice - trailingStopLoss : currentPrice + trailingStopLoss;
+
+		                // Set the initial stop loss to the trailing stop loss price
+		                SetStopLoss(CalculationMode.Price, trailStopPrice);
+		            }
+		        }
+
+		        // Check if the position is in profit and the current price is beyond the trailing stop loss price
+		        if (currentProfitTicks > highestProfitTicks && ((Position.MarketPosition == MarketPosition.Long && currentPrice > trailStopPrice) || (Position.MarketPosition == MarketPosition.Short && currentPrice < trailStopPrice)))
+		        {
+		            // Update the trailing stop loss price
+		            trailStopPrice = Position.MarketPosition == MarketPosition.Long ? currentPrice - trailingStopLoss : currentPrice + trailingStopLoss;
+
+		            // Modify the stop loss to the trailing stop loss price
+		            SetStopLoss(CalculationMode.Price, trailStopPrice);
+
+		            highestProfitTicks = currentProfitTicks;
+		        }
+				
+				//Print(string.Format("currentProfitTicks: {0},  {1} = {2}", currentProfitTicks, anotherVariable, someVariable + anotherVariable));
+	    	}	
+		}
+		
+		
+		#region Properties
+		[Range(1, int.MaxValue), NinjaScriptProperty]
+		[Display(ResourceType = typeof(Custom.Resource), Name = "Slow", GroupName = "NinjaScriptStrategyParameters", Order = 0)]
+		public int Slow
+		{ get; set; }
+		
+		[Range(1, int.MaxValue), NinjaScriptProperty]
+		[Display(ResourceType = typeof(Custom.Resource), Name = "Medium", GroupName = "NinjaScriptStrategyParameters", Order = 1)]
+		public int Medium
+		{ get; set; }
+		
+		[Range(1, int.MaxValue), NinjaScriptProperty]
+		[Display(ResourceType = typeof(Custom.Resource), Name = "Fast", GroupName = "NinjaScriptStrategyParameters", Order = 2)]
+		public int Fast
+		{ get; set; }
+		
+		[Range(0.01, 1), NinjaScriptProperty]
+		[Display(ResourceType = typeof(Custom.Resource), Name = "Pinbar Confirmation Value", GroupName = "NinjaScriptStrategyParameters", Order = 3)]
+		public double pinbarConfirmationValue
+		{ get; set; }
+		
+	/*	[NinjaScriptProperty]
+		[Range(2, 1024)]
+		[Display(Name="Profit Trail Trigger Ticks", Description="Take Profit Ticks", Order=9, GroupName="Parameters")]
+		public int profitTargetTriggerTicks
+		{ get; set; }	*/		
+			
+		[NinjaScriptProperty]
+		[Range(1, 1024)]
+		[Display(Name="Stop Loss Ticks", Description="Stop Loss Ticks", Order=10, GroupName="Parameters")]
+		public int stopLossTicks
+		{ get; set; }
+		
+		[NinjaScriptProperty]
+		[Range(1, 1024)]
+		[Display(Name="profitTargetTicks", Description="profitTargetTicks", Order=11, GroupName="Parameters")]
+		public int profitTargetTicks
+		{ get; set; }
+		
+		[NinjaScriptProperty]
+		[Range(1, 1024)]
+		[Display(Name="trailingStopLossTicks", Description="trailingStopLossTicks", Order=11, GroupName="Parameters")]
+		public int trailingStopLossTicks
+		{ get; set; }
+		
+			
+		/*[NinjaScriptProperty]
+		[Range(1, 1024)]
+		[Display(Name="Profit Trail Offset Ticks", Description="Profit Trail Offset Ticks", Order=14, GroupName="Parameters")]
+		public int profitTrailOffsetTicks
+		{ get; set; }*/
+		#endregion
+		
+		}
+}
