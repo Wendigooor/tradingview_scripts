@@ -83,7 +83,7 @@ private double highestProfitTicks = 0;
 			{
 				Description									= @"Enter the description for your new custom Strategy here.";
 				Name										= "PinBarV3 OnPriceChange";
-				Calculate									= Calculate.OnPriceChange;
+				Calculate									= Calculate.OnEachTick;
 				EntriesPerDirection							= 1;
 				EntryHandling								= EntryHandling.AllEntries;
 				IsExitOnSessionCloseStrategy				= true;
@@ -115,6 +115,7 @@ private double highestProfitTicks = 0;
 			else if (State == State.Configure)
 			{
 				SetStopLoss(CalculationMode.Ticks, stopLossTicks);
+				SetProfitTarget(CalculationMode.Ticks, profitTargetTicks);
 			}
 			else if (State == State.DataLoaded)
 			{
@@ -136,6 +137,10 @@ private double highestProfitTicks = 0;
 
 		protected override void OnBarUpdate()
 		{
+			
+			SetStopLoss(CalculationMode.Ticks, stopLossTicks);
+			SetProfitTarget(CalculationMode.Ticks, profitTargetTicks);
+			
 			if (CurrentBar < BarsRequiredToTrade)
 				return;
 			
@@ -179,11 +184,21 @@ private double highestProfitTicks = 0;
 			}
 			#endregion
 			
-			enableAndEpdateTrailingStop(close);
+			
+			
+			
+			
+			
+			//enableAndEpdateTrailingStop(close);
 		}
 		
 		protected override void OnMarketData(MarketDataEventArgs marketDataUpdateEvent)
  		{
+			
+			//if (Position.MarketPosition != MarketPosition.Flat) {
+			//	SetStopLoss(CalculationMode.Ticks, stopLossTicks);
+			//	SetProfitTarget(CalculationMode.Ticks, profitTargetTicks);
+			//}
    
 			//enableAndEpdateTrailingStop(marketDataUpdateEvent.Price);
 			
