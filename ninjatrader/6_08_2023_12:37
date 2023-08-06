@@ -141,13 +141,27 @@ private double highestProfitTicks = 0;
 		{
 			
 			SetStopLoss(CalculationMode.Ticks, stopLossTicks);
-			SetProfitTarget(CalculationMode.Ticks, profitTargetTicks );
+			SetProfitTarget(CalculationMode.Ticks, profitTargetTicks * 5 );
+			
+			
+			// WORKS with "Tick Replay" only, changed index
+			// WORKS with "Tick Replay" only, changed index
+			// WORKS with "Tick Replay" only, changed index
+			// WORKS with "Tick Replay" only, changed index
+			// WORKS with "Tick Replay" only, changed index
+			// WORKS with "Tick Replay" only, changed index
 			
 			// One thing to note is that addressing Close[1] will not return the previous tick during OnEachTick execution,
 			// it will always return the last closed bar. 
 			// Close[0] will always return the last tick available. 
-			enableAndEpdateTrailingStop( Close[0] ); // update trailing stop with last tick value, on each tick
-			lastBarValueIndex = 1; // Close[1], maSlow[1] in this case must refer to previous bar, which is closed and cannot be changed
+			
+			// Close[1], maSlow[1] in this case must refer to previous bar, which is closed and cannot be changed
+			lastBarValueIndex = 1; 
+			
+			// Since our strategy in calculating OnEachTick, OnBarUpdate is invoked every tick, no need to use OnMarketData.
+			// Update trailing stop with last tick value, on each tick
+			updateTrailingStop( Close[0] );
+			
 			
 			if (CurrentBar < BarsRequiredToTrade)
 				return;
@@ -191,30 +205,21 @@ private double highestProfitTicks = 0;
 				BarTraded = CurrentBar;
 			}
 			#endregion
-			
-			
-			
-			
-			
-			
-			
 		}
 		
-		protected override void OnMarketData(MarketDataEventArgs marketDataUpdateEvent)
+		/*protected override void OnMarketData(MarketDataEventArgs marketDataUpdateEvent)
  		{
 			
-			//if (Position.MarketPosition != MarketPosition.Flat) {
-			//	SetStopLoss(CalculationMode.Ticks, stopLossTicks);
-			//	SetProfitTarget(CalculationMode.Ticks, profitTargetTicks);
-			//}
-   
-			//enableAndEpdateTrailingStop(marketDataUpdateEvent.Last);
+			if (marketDataUpdateEvent.MarketDataType == MarketDataType.Last) {
+				//Print("Last: " + e.Volume + " @ " + marketDataUpdateEvent.Price);
+				
+				updateTrailingStop(marketDataUpdateEvent.Price);
+			}
 			
 
-		}
+		}*/
 		
-		void enableAndEpdateTrailingStop(double currentPrice) {
-			
+		void updateTrailingStop(double currentPrice) {
 			if (Position.MarketPosition != MarketPosition.Flat) {
 		        double currentProfitTicks = Position.GetUnrealizedProfitLoss(PerformanceUnit.Ticks, currentPrice);
 
