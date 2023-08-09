@@ -177,7 +177,7 @@ private double highestProfitTicks = 0;
 			// Close[1] would refer to the close of the previous 1 minute bar to the one currently forming.
 			// Close[0] would be the current price of the forming bar, based on the tick it's calculating on.
 			
-			if (DateTime.Now.Second % 5 == 0)
+			if (DateTime.Now.Second % 5 == 0 && Bars.TickCount == 1)
 				updateTrailingStop( Close[0] );
 			
 			#region entry logic
@@ -250,6 +250,8 @@ private double highestProfitTicks = 0;
 		
 		
 		void updateTrailingStop(double currentPrice) {
+			Print("updateTrailStop time: " + DateTime.Now + " tick: " + Bars.TickCount);
+			
 			if (Position.MarketPosition != MarketPosition.Flat) {
 				double currentProfitTicks = Position.GetUnrealizedProfitLoss(PerformanceUnit.Ticks, currentPrice);
 
