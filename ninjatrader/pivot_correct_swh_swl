@@ -31,6 +31,8 @@ namespace NinjaTrader.NinjaScript.Strategies
 		
 		private double hprice = 0.0;
         private double lprice = 0.0;
+		private double prevHprice = 0.0;
+        private double prevLprice = 0.0;
         private bool le = false;
         private bool se = false;
 		private bool prevLe = false;
@@ -96,7 +98,7 @@ namespace NinjaTrader.NinjaScript.Strategies
 			// real shiet
 			updatePivotValues();
 			
-			Print("Time:"+ Time[0] + " le: " + le + " hprice: " + hprice + " || se: " + se + " lprice: " + lprice);
+			//Print("Time:"+ Time[0] + " le: " + le + " hprice: " + hprice + " || se: " + se + " lprice: " + lprice);
 			
 			if (le && !isLong()) {
 				if (myEntryLongOrder == null) {
@@ -121,39 +123,76 @@ namespace NinjaTrader.NinjaScript.Strategies
 			double swh = FunHigh(pivotLeftBars);
 			double swl = FunLow(pivotLeftBars);
 			
-			//Print("Time:"+ Time[0] + " swh: " + swh + " swl: " + swl);
+			//Print("Time1:"+ Time[0] + " swh: " + swh + " swl: " + swl + " prevLe: " + prevLe + " prevSe: " + prevSe);
+			
+			/*
+			swh = funHigh(leftBars)
+			swl = funLow(leftBars)
 
-			if (!double.IsNaN(swh))
+			// Pivot High 
+			swh_cond = not na(swh)
+
+			hprice = 0.0
+			hprice := swh_cond ? swh : hprice[1]
+
+			le = false
+			le := swh_cond ? true : le[1] and close[1] > hprice ? false : le[1]
+			*/
+			
+			hprice = 0.0;
+			le = false;
+			
+			bool swhCondition = !double.IsNaN(swh);
+			hprice = swhCondition ? swh : prevHprice;
+			prevHprice = hprice;
+
+			if (swhCondition)
 			    le = true;
 			else
 			{
 			    bool closeCondition = Close[1] > hprice;
 			    le = prevLe && closeCondition ? false : prevLe;
 			}
+			
+			prevLe = le;
+			
+			
+			
+			
+			/*
+			// Pivot Low 
+			swl_cond = not na(swl)
 
-			if (!double.IsNaN(swl))
+			lprice = 0.0
+			lprice := swl_cond ? swl : lprice[1]
+
+			se = false
+			se := swl_cond ? true : se[1] and close[1] < lprice ? false : se[1]
+			*/			
+			
+			lprice = 0.0;
+			se = false;
+			
+			bool swlCondition = !double.IsNaN(swl);
+			lprice = swlCondition ? swl : prevLprice;
+			prevLprice = lprice;
+
+			if (swlCondition)
 			    se = true;
 			else
 			{
 			    bool closeCondition = Close[1] < lprice;
 			    se = prevSe && closeCondition ? false : prevSe;
 			}
+			
+			Print("Time2:"+ Time[0] + " le: " + le + " se: " + se + " hprice: " + hprice + " lprice: " + lprice);
 
 			prevSe = se;
-			prevLe = le;
+			
 		}
 		
-		private bool isLong()
-		{
-		    return Position.MarketPosition == MarketPosition.Long;
-		}
 
-		private bool isShort()
-		{
-		    return Position.MarketPosition == MarketPosition.Short;
-		}
-		
-		
+		#region pivotFunctions
 		private double FunLow(int len)
 		{
 		    double p = Low[len-1];
@@ -225,124 +264,19 @@ namespace NinjaTrader.NinjaScript.Strategies
 		    
 		    return double.NaN; // Return NaN if the condition is not met
 		}
-
-
+		#endregion
 		
-		private double PivotHigh(int leftBars, int rightBars)
+		#region otherFunctions
+		private bool isLong()
 		{
-		    double pivotHigh = double.NaN;
-		    int pivotRange = leftBars + rightBars;
-		    
-		    double leftEdgeValue = High[pivotRange];
-		    
-		    if (!double.IsNaN(High[0]) && leftBars > 0 && rightBars > 0 && !double.IsNaN(leftEdgeValue))
-		    {
-		        double possiblePivotHigh = High[rightBars];
-		        double[] arrayOfSeriesValues = new double[pivotRange + 1];
-		        
-		        for (int barIndex = pivotRange; barIndex >= 0; barIndex--)
-		        {
-		            arrayOfSeriesValues[pivotRange - barIndex] = High[barIndex];
-		        }
-		        
-		        int pivotHighRightBars = arrayOfSeriesValues.Length - Array.LastIndexOf(arrayOfSeriesValues, arrayOfSeriesValues.Max()) - 1;
-		        
-		        if (pivotHighRightBars == rightBars)
-		        {
-		            pivotHigh = possiblePivotHigh;
-		        }
-		    }
-		    
-		    return pivotHigh;
+		    return Position.MarketPosition == MarketPosition.Long;
 		}
 
-		private double PivotLow(int leftBars, int rightBars)
+		private bool isShort()
 		{
-		    double pivotLow = double.NaN;
-		    int pivotRange = leftBars + rightBars;
-		    
-		    double leftEdgeValue = Low[pivotRange];
-		    
-		    if (!double.IsNaN(Low[0]) && leftBars > 0 && rightBars > 0 && !double.IsNaN(leftEdgeValue))
-		    {
-		        double possiblePivotLow = Low[rightBars];
-		        double[] arrayOfSeriesValues = new double[pivotRange + 1];
-		        
-		        for (int barIndex = pivotRange; barIndex >= 0; barIndex--)
-		        {
-		            arrayOfSeriesValues[pivotRange - barIndex] = Low[barIndex];
-		        }
-		        
-		        int pivotLowRightBars = arrayOfSeriesValues.Length - Array.IndexOf(arrayOfSeriesValues, arrayOfSeriesValues.Min()) - 1;
-		        
-		        if (pivotLowRightBars == rightBars)
-		        {
-		            pivotLow = possiblePivotLow;
-		        }
-		    }
-		    
-		    return pivotLow;
+		    return Position.MarketPosition == MarketPosition.Short;
 		}
-
-		
-		private double PivotHighOld(int leftBars, int rightBars)
-		{
-		    double pivotHigh = double.NaN;
-		    
-		    for (int i = 0; i < rightBars; i++)
-		    {
-		        bool isHigher = true;
-		        
-		        for (int j = i - leftBars; j <= i + rightBars; j++)
-		        {
-		            if (j < 0 || j >= Bars.Count)
-		                continue;
-					
-		            if (High[j] >= High[i]) {
-						Print("Time:"+ Time[0] + " High[j]: " + High[j] + " High[i]: " + High[i] + " j: " + j + " i: " + i); 
-		                isHigher = false;
-		                break;
-		            }
-		        }
-		        
-		        if (isHigher) {
-		            pivotHigh = High[i];
-		            break;
-		        }
-		    }
-		    
-		    return pivotHigh;
-		}
-
-		private double PivotLowOld(int leftBars, int rightBars)
-		{
-		    double pivotLow = double.NaN;
-		    
-		    for (int i = 0; i < rightBars; i++)
-		    {
-		        bool isLower = true;
-		        
-		        for (int j = i - leftBars; j <= i + rightBars; j++)
-		        {
-		            if (j < 0 || j >= Bars.Count)
-		                continue;
-		            
-		            if (Low[j] <= Low[i])
-		            {
-		                isLower = false;
-		                break;
-		            }
-		        }
-		        
-		        if (isLower)
-		        {
-		            pivotLow = Low[i];
-		            break;
-		        }
-		    }
-		    
-		    return pivotLow;
-		}
+		#endregion
 		
 		#region Properties
 		
