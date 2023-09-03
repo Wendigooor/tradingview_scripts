@@ -1,0 +1,373 @@
+#region Using declarations
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.ComponentModel.DataAnnotations;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using System.Windows;
+using System.Windows.Input;
+using System.Windows.Media;
+using System.Xml.Serialization;
+using NinjaTrader.Cbi;
+using NinjaTrader.Gui;
+using NinjaTrader.Gui.Chart;
+using NinjaTrader.Gui.SuperDom;
+using NinjaTrader.Gui.Tools;
+using NinjaTrader.Data;
+using NinjaTrader.NinjaScript;
+using NinjaTrader.Core.FloatingPoint;
+using NinjaTrader.NinjaScript.Indicators;
+using NinjaTrader.NinjaScript.DrawingTools;
+#endregion
+
+//This namespace holds Strategies in this folder and is required. Do not change it. 
+namespace NinjaTrader.NinjaScript.Strategies
+{
+	public class PivotPointsV1 : Strategy
+	{
+		#region GlobalVariables
+		
+		private double hprice = 0.0;
+        private double lprice = 0.0;
+        private bool le = false;
+        private bool se = false;
+		private bool prevLe = false;
+        private bool prevSe = false;
+		
+		private Order myEntryLongOrder = null;
+		private int barNumberOfLongOrder = 0;
+		
+		private Order myEntryShortOrder = null;
+		private int barNumberOfShortOrder = 0;
+		
+		#endregion
+		
+		protected override void OnStateChange()
+		{
+			if (State == State.SetDefaults)
+			{
+				Description									= @"Enter the description for your new custom Strategy here.";
+				Name										= "PivotPointsV1";
+				Calculate									= Calculate.OnBarClose;
+				EntriesPerDirection							= 1;
+				EntryHandling								= EntryHandling.AllEntries;
+				IsExitOnSessionCloseStrategy				= true;
+				ExitOnSessionCloseSeconds					= 30;
+				IsFillLimitOnTouch							= false;
+				MaximumBarsLookBack							= MaximumBarsLookBack.TwoHundredFiftySix;
+				OrderFillResolution							= OrderFillResolution.Standard;
+				Slippage									= 0;
+				StartBehavior								= StartBehavior.WaitUntilFlat;
+				TimeInForce									= TimeInForce.Gtc;
+				TraceOrders									= false;
+				RealtimeErrorHandling						= RealtimeErrorHandling.StopCancelClose;
+				StopTargetHandling							= StopTargetHandling.PerEntryExecution;
+				BarsRequiredToTrade							= 20;
+				// Disable this property for performance gains in Strategy Analyzer optimizations
+				// See the Help Guide for additional information
+				IsInstantiatedOnEachOptimizationIteration	= true;
+				
+				
+				
+				pivotLeftBars = 4;
+				//pivotRightBars = 4;
+				
+				stopLossTicks = 63;
+				profitTargetTicks = 121;				
+			}
+			else if (State == State.Configure)
+			{
+			}
+		}
+
+		protected override void OnBarUpdate()
+		{
+			if (CurrentBar < BarsRequiredToTrade)
+				return;
+			
+			SetStopLoss(CalculationMode.Ticks, stopLossTicks);
+			SetProfitTarget(CalculationMode.Ticks, profitTargetTicks);
+			
+			
+			
+			
+			// real shiet
+			updatePivotValues();
+			
+			Print("Time:"+ Time[0] + " le: " + le + " hprice: " + hprice + " || se: " + se + " lprice: " + lprice);
+			
+			if (le && !isLong()) {
+				if (myEntryLongOrder == null) {
+				  	
+				}
+				
+				//EnterLongLimit(hprice + TickSize);
+			}
+
+			if (se && !isShort()) {
+				if (myEntryShortOrder == null) {
+				  	
+				}
+				
+				//EnterShortLimit(lprice - TickSize);
+			}			
+		}
+		
+		private void updatePivotValues() {
+			//double swh = PivotHigh(pivotLeftBars, pivotRightBars);
+            //double swl = PivotLow(pivotLeftBars, pivotRightBars);
+			double swh = FunHigh(pivotLeftBars);
+			double swl = FunLow(pivotLeftBars);
+			
+			//Print("Time:"+ Time[0] + " swh: " + swh + " swl: " + swl);
+
+			if (!double.IsNaN(swh))
+			    le = true;
+			else
+			{
+			    bool closeCondition = Close[1] > hprice;
+			    le = prevLe && closeCondition ? false : prevLe;
+			}
+
+			if (!double.IsNaN(swl))
+			    se = true;
+			else
+			{
+			    bool closeCondition = Close[1] < lprice;
+			    se = prevSe && closeCondition ? false : prevSe;
+			}
+
+			prevSe = se;
+			prevLe = le;
+		}
+		
+		private bool isLong()
+		{
+		    return Position.MarketPosition == MarketPosition.Long;
+		}
+
+		private bool isShort()
+		{
+		    return Position.MarketPosition == MarketPosition.Short;
+		}
+		
+		
+		private double FunLow(int len)
+		{
+		    double p = Low[len-1];
+		    bool isFound = true;
+			
+			//Print("Timelow1:"+ Time[0] + " p: " + p);
+		    
+		    for (int i = 0; i < len; i++)
+		    {
+				//Print("Timelow2:"+ Time[0] + "  i: " + i  + " Low[i]: " + Low[i]);
+		        if (Low[i] < p)
+		        {
+		            isFound = false;
+		            break;
+		        }
+		    }
+			
+			//Print("Timelow3:"+ Time[0] + " isFound: " + isFound);
+		    
+		    if (isFound)
+		    {
+		        for (int i = len + 1; i < 2 * len + 1; i++)
+		        {
+					//Print("Timelow4:"+ Time[0] + "  i: " + i  + " Low[i]: " + Low[i-1]);
+		            if (Low[i-1] <= p)
+		            {
+		                isFound = false;
+		                break;
+		            }
+		        }
+		    }
+			
+			//Print("Timelow5:"+ Time[0] + " isFound: " + isFound);
+		    
+		    if (isFound)
+		        return p;
+		    
+		    return double.NaN; // Return NaN if the condition is not met
+		}
+		
+		private double FunHigh(int len)
+		{
+		    double p = High[len-1];
+		    bool isFound = true;
+		    
+		    for (int i = 0; i < len; i++)
+		    {
+		        if (High[i] > p)
+		        {
+		            isFound = false;
+		            break;
+		        }
+		    }
+		    
+		    if (isFound)
+		    {
+		        for (int i = len + 1; i < 2 * len + 1; i++)
+		        {
+		            if (High[i-1] >= p)
+		            {
+		                isFound = false;
+		                break;
+		            }
+		        }
+		    }
+		    
+		    if (isFound)
+		        return p;
+		    
+		    return double.NaN; // Return NaN if the condition is not met
+		}
+
+
+		
+		private double PivotHigh(int leftBars, int rightBars)
+		{
+		    double pivotHigh = double.NaN;
+		    int pivotRange = leftBars + rightBars;
+		    
+		    double leftEdgeValue = High[pivotRange];
+		    
+		    if (!double.IsNaN(High[0]) && leftBars > 0 && rightBars > 0 && !double.IsNaN(leftEdgeValue))
+		    {
+		        double possiblePivotHigh = High[rightBars];
+		        double[] arrayOfSeriesValues = new double[pivotRange + 1];
+		        
+		        for (int barIndex = pivotRange; barIndex >= 0; barIndex--)
+		        {
+		            arrayOfSeriesValues[pivotRange - barIndex] = High[barIndex];
+		        }
+		        
+		        int pivotHighRightBars = arrayOfSeriesValues.Length - Array.LastIndexOf(arrayOfSeriesValues, arrayOfSeriesValues.Max()) - 1;
+		        
+		        if (pivotHighRightBars == rightBars)
+		        {
+		            pivotHigh = possiblePivotHigh;
+		        }
+		    }
+		    
+		    return pivotHigh;
+		}
+
+		private double PivotLow(int leftBars, int rightBars)
+		{
+		    double pivotLow = double.NaN;
+		    int pivotRange = leftBars + rightBars;
+		    
+		    double leftEdgeValue = Low[pivotRange];
+		    
+		    if (!double.IsNaN(Low[0]) && leftBars > 0 && rightBars > 0 && !double.IsNaN(leftEdgeValue))
+		    {
+		        double possiblePivotLow = Low[rightBars];
+		        double[] arrayOfSeriesValues = new double[pivotRange + 1];
+		        
+		        for (int barIndex = pivotRange; barIndex >= 0; barIndex--)
+		        {
+		            arrayOfSeriesValues[pivotRange - barIndex] = Low[barIndex];
+		        }
+		        
+		        int pivotLowRightBars = arrayOfSeriesValues.Length - Array.IndexOf(arrayOfSeriesValues, arrayOfSeriesValues.Min()) - 1;
+		        
+		        if (pivotLowRightBars == rightBars)
+		        {
+		            pivotLow = possiblePivotLow;
+		        }
+		    }
+		    
+		    return pivotLow;
+		}
+
+		
+		private double PivotHighOld(int leftBars, int rightBars)
+		{
+		    double pivotHigh = double.NaN;
+		    
+		    for (int i = 0; i < rightBars; i++)
+		    {
+		        bool isHigher = true;
+		        
+		        for (int j = i - leftBars; j <= i + rightBars; j++)
+		        {
+		            if (j < 0 || j >= Bars.Count)
+		                continue;
+					
+		            if (High[j] >= High[i]) {
+						Print("Time:"+ Time[0] + " High[j]: " + High[j] + " High[i]: " + High[i] + " j: " + j + " i: " + i); 
+		                isHigher = false;
+		                break;
+		            }
+		        }
+		        
+		        if (isHigher) {
+		            pivotHigh = High[i];
+		            break;
+		        }
+		    }
+		    
+		    return pivotHigh;
+		}
+
+		private double PivotLowOld(int leftBars, int rightBars)
+		{
+		    double pivotLow = double.NaN;
+		    
+		    for (int i = 0; i < rightBars; i++)
+		    {
+		        bool isLower = true;
+		        
+		        for (int j = i - leftBars; j <= i + rightBars; j++)
+		        {
+		            if (j < 0 || j >= Bars.Count)
+		                continue;
+		            
+		            if (Low[j] <= Low[i])
+		            {
+		                isLower = false;
+		                break;
+		            }
+		        }
+		        
+		        if (isLower)
+		        {
+		            pivotLow = Low[i];
+		            break;
+		        }
+		    }
+		    
+		    return pivotLow;
+		}
+		
+		#region Properties
+		
+		[Range(1, int.MaxValue), NinjaScriptProperty]
+		[Display(ResourceType = typeof(Custom.Resource), Name = "Pivot Left Bars", GroupName = "Pivot", Order = 0)]
+		public int pivotLeftBars
+		{ get; set; }
+
+		/*[Range(1, int.MaxValue), NinjaScriptProperty]
+		[Display(ResourceType = typeof(Custom.Resource), Name = "Pivot Right Bars", GroupName = "Pivot", Order = 1)]
+		public int pivotRightBars
+		{ get; set; }*/
+
+		[NinjaScriptProperty]
+		[Range(1, 1024)]
+		[Display(Name="Stop Loss Ticks", Description="Stop Loss Ticks", Order=10, GroupName="Order Params")]
+		public int stopLossTicks
+		{ get; set; }
+
+		[NinjaScriptProperty]
+		[Range(1, 1024)]
+		[Display(Name="profitTargetTicks", Description="profit Target Ticks", Order=11, GroupName="Order Params")]
+		public int profitTargetTicks
+		{ get; set; }
+
+		#endregion	
+	}	
+}
