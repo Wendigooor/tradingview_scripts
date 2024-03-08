@@ -283,7 +283,7 @@ else
 //log.info("{0} {1} {2} {3} {4}",array.get(arraySYF1GannML,0), array.get(arraySYF1GannML,1), array.get(arraySYF1GannML,2), array.get(arraySYF1GannML,3), array.get(arraySYF1GannML,4))
 
 confirmed_line_to = array.get(arraySXF1GannML,0)
-confirmed_line_from = array.get(arraySXF1GannML,3)
+confirmed_line_from = array.get(arraySXF1GannML,2)
 confirmed_value0 = array.get(arraySYF1GannML,0)
 confirmed_value1 = array.get(arraySYF1GannML,1)
 confirmed_value2 = array.get(arraySYF1GannML,2)
@@ -294,10 +294,14 @@ confirmed_value4 = array.get(arraySYF1GannML,4)
 mid_level = (confirmed_value1 + confirmed_value2) / 2
 // + 5 * 1000 * timeframe.in_seconds(timeframe.period)
 
-line_color = confirmed_value1 > confirmed_value3 ? color.blue : color.red
+// line_color = confirmed_value0 > confirmed_value3 ? color.blue : color.red
 
-bull_market = (confirmed_value0 > confirmed_value1 and confirmed_value1 > confirmed_value2)
+bull_market = (confirmed_value0 > confirmed_value1 and confirmed_value0 > confirmed_value2)
 bear_market = (confirmed_value0 < confirmed_value1 and confirmed_value0 < confirmed_value2)
+
+line_color = bull_market ? color.blue : color.red
+
+//log.info("{0} {1}", bull_market, bear_market)
 
 if bull_market or bear_market
 	line.new(confirmed_line_from, mid_level, confirmed_line_to + 5 * 1000 * timeframe.in_seconds(timeframe.period), mid_level, xloc = xloc.bar_time, color = line_color, width = solidLineWidth)
