@@ -1,0 +1,317 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © meomeo105
+// Gann Swing Chart version 3.0
+//@version=5
+indicator('Gann Swing [Multi Layer] iii x2', shorttitle='GSC[ML] iii x2', overlay=true, max_lines_count=500, max_boxes_count = 500, max_labels_count = 500, max_bars_back = 5000)
+
+DefaultGannMLSetting = "[Gann][SGann][Color][ChoCh Gann][ChoCh SGann]"
+showF1GannML = input.bool(true,"", group = DefaultGannMLSetting,inline = "showF1GannML")
+showSF1GannML = input.bool(true,"F1", group = DefaultGannMLSetting,inline = "showF1GannML")
+colorF1GannML = input.color(color.black, '', group = DefaultGannMLSetting,inline = "showF1GannML")
+showChoChF1GannML = input.bool(true,"", group = DefaultGannMLSetting,inline = "showF1GannML")
+showChoChSF1GannML = input.bool(true,"", group = DefaultGannMLSetting,inline = "showF1GannML")
+
+showF2GannML = input.bool(false,"", group = DefaultGannMLSetting,inline = "showF2GannML")
+showSF2GannML = input.bool(false,"F2", group = DefaultGannMLSetting,inline = "showF2GannML")
+colorF2GannML = input.color(color.yellow, '', group = DefaultGannMLSetting,inline = "showF2GannML")
+showChoChF2GannML = input.bool(false,"", group = DefaultGannMLSetting,inline = "showF2GannML")
+showChoChSF2GannML = input.bool(false,"", group = DefaultGannMLSetting,inline = "showF2GannML")
+
+showF3GannML = input.bool(false,"", group = DefaultGannMLSetting,inline = "showF3GannML")
+showSF3GannML = input.bool(false,"F3", group = DefaultGannMLSetting,inline = "showF3GannML")
+colorF3GannML = input.color(color.purple, '', group = DefaultGannMLSetting,inline = "showF3GannML")
+showChoChF3GannML = input.bool(false,"", group = DefaultGannMLSetting,inline = "showF3GannML")
+showChoChSF3GannML = input.bool(false,"", group = DefaultGannMLSetting,inline = "showF3GannML")
+
+// showFibChoch = input.bool(true, 'Show Fib from prev CHoCH?')
+// show30and70levels = input.bool(true, 'Show 30 and 70 levels?')
+
+dottedLineWidth = input.int(2, 'Dotted Line Width')
+solidLineWidth = input.int(3, 'Solid Line Width')
+dashedLineWidth = input.int(2, 'Dashed Line Width')
+
+drawRectangles = input.bool(true, 'Draw rectangles?')
+useWithClose = input.bool(false, 'Use with close?')
+
+global_hhighs_llows = array.new_float(4)
+
+bool drawBullish = na
+drawBullish := na(drawBullish[1]) ? drawBullish[1] : na
+
+bool drawBearish = na
+drawBearish := na(drawBearish[1]) ? drawBearish[1] : na
+
+f_CalculateF0(_pointX,_pointY,arrayX0,arrayY0)=>
+	array.unshift(arrayX0,_pointX)
+	array.unshift(arrayY0,_pointY)
+	[1]
+
+f_CalculateFn1(_pointX,_pointY,arrayXn,arrayYn,arrayXFn1,arrayYFn1)=>
+	//_resultdraw 2:Tiếp tục 1:Đảo chiều
+	int _resultdraw = 0
+	//OSB pha dinh/day
+	if((array.get(arrayYFn1,0) >= array.get(arrayYFn1,1) and array.get(arrayYn,0) < array.get(arrayYFn1,1)) or (array.get(arrayYFn1,0) <= array.get(arrayYFn1,1) and array.get(arrayYn,0) > array.get(arrayYFn1,1)))
+		array.unshift(arrayXFn1,_pointX)
+	    array.unshift(arrayYFn1,_pointY)
+		_resultdraw := 1
+	//Dao chieu sang giam
+	else if(array.get(arrayYFn1,0) >= array.get(arrayYFn1,1) and (array.get(arrayYn,0) < array.get(arrayYn,1) and array.get(arrayYn,0) < array.get(arrayYn,2) and array.get(arrayYn,1) < array.get(arrayYn,3)) and array.get(arrayYn,2) < array.get(arrayYn,3))
+		array.unshift(arrayXFn1,_pointX)
+	    array.unshift(arrayYFn1,_pointY)
+		_resultdraw := 1
+	//Dao chieu sang tang
+	else if(array.get(arrayYFn1,0) <= array.get(arrayYFn1,1) and (array.get(arrayYn,0) > array.get(arrayYn,1) and array.get(arrayYn,0) > array.get(arrayYn,2) and array.get(arrayYn,1) > array.get(arrayYn,3)) and array.get(arrayYn,2) > array.get(arrayYn,3))
+		array.unshift(arrayXFn1,_pointX)
+	    array.unshift(arrayYFn1,_pointY)
+		_resultdraw := 1
+	else if(array.get(arrayYFn1,0) >= array.get(arrayYFn1,1) and _pointY >= array.get(arrayYFn1,0) and (_pointY >= array.get(arrayYFn1,0) or (array.get(arrayYn,0) > array.get(arrayYn,2) and array.get(arrayYn,2) > array.get(arrayYn,1)) or (array.get(arrayYn,0) > array.get(arrayYn,1) and array.get(arrayYn,1) > array.get(arrayYn,2) and array.get(arrayYn,2) > array.get(arrayYn,3))))
+		array.set(arrayXFn1, 0, _pointX)
+		array.set(arrayYFn1, 0, _pointY)
+		_resultdraw := 2
+	else if(array.get(arrayYFn1,0) <= array.get(arrayYFn1,1) and _pointY <= array.get(arrayYFn1,0) and (_pointY <= array.get(arrayYFn1,0) or (array.get(arrayYn,0) < array.get(arrayYn,2) and array.get(arrayYn,2) < array.get(arrayYn,1)) or (array.get(arrayYn,0) < array.get(arrayYn,1) and array.get(arrayYn,1) < array.get(arrayYn,2) and array.get(arrayYn,2) < array.get(arrayYn,3))))
+		array.set(arrayXFn1, 0, _pointX)
+		array.set(arrayYFn1, 0, _pointY)
+		_resultdraw := 2
+	[_resultdraw]
+
+f_CalculateSFn1(_pointX,_pointY,_arrayMark,_mIdxMark,arraySXFn1,arraySYFn1)=>
+	int _resultdraw = 0
+	if(array.get(_arrayMark,_mIdxMark) == 0)
+		if((array.get(arraySYFn1,0) >= array.get(arraySYFn1,1) and _pointY >= array.get(arraySYFn1,0)) or (array.get(arraySYFn1,0) <= array.get(arraySYFn1,1) and _pointY <= array.get(arraySYFn1,0)))
+			array.set(arraySXFn1, 0, _pointX)
+			array.set(arraySYFn1, 0, _pointY)
+			_resultdraw := 2
+		else if((array.get(arraySYFn1,0) >= array.get(arraySYFn1,1) and _pointY < array.get(arraySYFn1,1)) or (array.get(arraySYFn1,0) <= array.get(arraySYFn1,1) and _pointY > array.get(arraySYFn1,1)))
+			array.unshift(arraySXFn1,_pointX)
+			array.unshift(arraySYFn1,_pointY)
+			_resultdraw := 1
+		else if((array.get(arraySYFn1,0) >= array.get(arraySYFn1,1) and _pointY < array.get(arraySYFn1,0) and _pointY > array.get(arraySYFn1,1)) or (array.get(arraySYFn1,0) <= array.get(arraySYFn1,1) and _pointY > array.get(arraySYFn1,0) and _pointY < array.get(arraySYFn1,1)))
+			array.unshift(arraySXFn1,_pointX)
+			array.unshift(arraySYFn1,_pointY)
+			array.set(_arrayMark,_mIdxMark,_pointY)
+			_resultdraw := 1
+	else if(array.get(_arrayMark,_mIdxMark) > 0)
+		if((array.get(arraySYFn1,0) >= array.get(arraySYFn1,1) and _pointY < array.get(arraySYFn1,1)) or (array.get(arraySYFn1,0) <= array.get(arraySYFn1,1) and _pointY > array.get(arraySYFn1,1)))
+			array.unshift(arraySXFn1,_pointX)
+			array.unshift(arraySYFn1,_pointY)
+			array.set(_arrayMark,_mIdxMark,0)
+			_resultdraw := 1
+		else if((array.get(arraySYFn1,0) >= array.get(arraySYFn1,1) and _pointY > array.get(arraySYFn1,2)) or (array.get(arraySYFn1,0) <= array.get(arraySYFn1,1) and _pointY < array.get(arraySYFn1,2)))
+			array.set(arraySXFn1, 0, _pointX)
+			array.set(arraySYFn1, 0, _pointY)
+			array.set(_arrayMark,_mIdxMark,0)
+			_resultdraw := 2
+		else if((array.get(arraySYFn1,0) >= array.get(arraySYFn1,1) and _pointY <= array.get(arraySYFn1,2) and _pointY >= array.get(arraySYFn1,0)) or (array.get(arraySYFn1,0) <= array.get(arraySYFn1,1) and _pointY >= array.get(arraySYFn1,2) and _pointY <= array.get(arraySYFn1,0)))
+			array.set(arraySXFn1, 0, _pointX)
+			array.set(arraySYFn1, 0, _pointY)
+			array.set(_arrayMark,_mIdxMark,_pointY)
+			_resultdraw := 2
+
+	[_resultdraw]
+
+f_CalculateRemoveDuplicateLine(arrayLine,arraySLine)=>
+	if(array.size(arraySLine) > 1 and array.size(arrayLine) >1)
+		if(line.get_y1(array.get(arraySLine,1)) == line.get_y1(array.get(arrayLine,1)) and line.get_y2(array.get(arraySLine,1)) == line.get_y2(array.get(arrayLine,1))and line.get_x1(array.get(arraySLine,1)) == line.get_x1(array.get(arrayLine,1)) and line.get_x2(array.get(arraySLine,1)) == line.get_x2(array.get(arrayLine,1)))
+			line.delete(array.get(arrayLine,1))
+			array.remove(arrayLine,1)
+
+f_CalculateChoCh(arraySXFn1,arraySYFn1) =>
+	int _X = 0
+	float _Y = 0
+	// ChoCh Trường hợp chữ N ngược, chữ N
+	if((array.get(arraySYFn1,3) > array.get(arraySYFn1,2) and array.get(arraySYFn1,3) < array.get(arraySYFn1,1) and array.get(arraySYFn1,0) < array.get(arraySYFn1,2)) or (array.get(arraySYFn1,3) < array.get(arraySYFn1,2) and array.get(arraySYFn1,3) > array.get(arraySYFn1,1) and array.get(arraySYFn1,0) > array.get(arraySYFn1,2)))
+		_X := array.get(arraySXFn1,2)
+		_Y := array.get(arraySYFn1,2)
+	[_X,_Y]
+	
+
+f_CalculateDrawF(_drawF,_showSF,arrayLine,arrayX,arrayY,showChoCh,arrayMChoCh,idxChoCh,_color) =>
+	if(_drawF > 0)
+		if(_drawF == 1)
+			array.unshift(arrayLine,line.new(array.get(arrayX,1),array.get(arrayY,1),array.get(arrayX,0),array.get(arrayY,0), color = _color,xloc = xloc.bar_time,width = dottedLineWidth,style = line.style_dotted))
+		else if(_drawF == 2 and array.size(arrayLine) >0)
+			line.set_xy2(array.get(arrayLine,0),array.get(arrayX,0),array.get(arrayY,0))
+		[XChoCh,YChoCh] = f_CalculateChoCh(arrayX,arrayY)
+		if(showChoCh and YChoCh >0 and array.get(arrayMChoCh,idxChoCh) != YChoCh)
+			array.set(arrayMChoCh,idxChoCh,YChoCh)
+			line.new(XChoCh,YChoCh,time,YChoCh, color = _color,xloc = xloc.bar_time,width = dottedLineWidth,style = line.style_dotted)
+	
+f_CalculateDrawSF(_drawSF,arrayLine,arraySLine,arraySX,arraySY,showChoCh,arrayMChoCh,idxChoCh,_color) =>
+	if(_drawSF > 0)
+		if(_drawSF == 1)
+			array.unshift(arraySLine,line.new(array.get(arraySX,1),array.get(arraySY,1),array.get(arraySX,0),array.get(arraySY,0), color = _color,xloc = xloc.bar_time,width = solidLineWidth))
+		else if(_drawSF == 2 and array.size(arraySLine) >0)
+			// hehe
+			//log.info("{0} {1} {2} {3}", array.get(arraySX,0), array.get(arraySX,1), array.get(arraySY,0), array.get(arraySY,1))
+			line.set_xy2(array.get(arraySLine,0),array.get(arraySX,0),array.get(arraySY,0))
+		f_CalculateRemoveDuplicateLine(arrayLine,arraySLine)
+		[XChoChS,YChoChS] = f_CalculateChoCh(arraySX,arraySY)
+
+		//log.info("{0} {1}", array.get(arrayYF0GannML,0), array.get(arrayYF0GannML,0))
+
+		if(showChoCh and YChoChS >0 and array.get(arrayMChoCh,idxChoCh) != YChoChS)
+			array.set(arrayMChoCh,idxChoCh,YChoChS)
+			line.new(XChoChS,YChoChS,time,YChoChS, color = _color,xloc = xloc.bar_time,width = dashedLineWidth,style = line.style_dashed)
+
+			//log.info("{0} {1}", XChoChS, YChoChS)
+			//global_llows := 123
+			//array.set(global_hhighs_llows, 0, )
+    		//array.set(global_hhighs_llows, IDX_RSI, v_rsi)
+
+			// if showFibChoch
+			// 	//anchorBarIndex = 0
+			// 	//anchorBarIndex := time / (1000 * timeframe.in_seconds(timeframe.period))
+  			// 	//anchorBarsBack := bar_index - anchorBarIndex 
+			// 	barDifference = (time - XChoChS) / timeframe.in_seconds(timeframe.period) / 1000
+			// 	//log.info("XChoChS {0} YChoChS: {1}, time: {2}, xloc.bar_time: {3}, anchorBarIndex: {4}", XChoChS, YChoChS, time, xloc.bar_time, barDifference)
+			// 	// line.new(left_value, line_level, right_value + 10, line_level, color=color.blue)
+			// 	//if XChoChS > YChoChS
+			// 	//line.new(bar_index - barDifference, bar_index + 5, time, YChoChS - 10, xloc = xloc.bar_time)
+			// 	if barDifference < 500
+			// 		lowest = ta.lowest(barDifference)
+			// 		highest = ta.highest(barDifference)
+			// 		//log.info("{0} {1}", lowest, highest)
+			// 		//mid_level = (lowest + highest) / 2
+			// 		mid_level = (XChoChS + YChoChS) / 2
+			// 		line.new(XChoChS, mid_level, time + 5 * 1000 * timeframe.in_seconds(timeframe.period), mid_level, xloc = xloc.bar_time)
+
+var arrayMarkGannML = array.new_float(3,0)
+var arrayMarkChoChGannML = array.new_float(6,0)
+var arrayXF0GannML = array.new_int(5,time)
+var arrayYF0GannML = array.new_float(5,close)
+var arrayXF1GannML = array.new_int(5,time)
+var arrayYF1GannML = array.new_float(5,close)
+var arrayLineF1GannML = array.new_line()
+var arraySXF1GannML = array.new_int(5,time)
+var arraySYF1GannML = array.new_float(5,close)
+var arraySLineF1GannML = array.new_line()
+var arrayXF2GannML = array.new_int(5,time)
+var arrayYF2GannML = array.new_float(5,close)
+var arrayLineF2GannML = array.new_line()
+var arraySXF2GannML = array.new_int(5,time)
+var arraySYF2GannML = array.new_float(5,close)
+var arraySLineF2GannML = array.new_line()
+var arrayXF3GannML = array.new_int(5,time)
+var arrayYF3GannML = array.new_float(5,close)
+var arrayLineF3GannML = array.new_line()
+var arraySXF3GannML = array.new_int(5,time)
+var arraySYF3GannML = array.new_float(5,close)
+var arraySLineF3GannML = array.new_line()
+f_CalculateAndDrawFn1(_pointX,_pointY) =>
+	//F0 : Song cua nen
+	array.unshift(arrayXF0GannML,_pointX)
+	array.unshift(arrayYF0GannML,_pointY)
+	//F1,F2,...: Song cua song theo Gann
+	if(showF1GannML or showF2GannML or showF3GannML or showSF1GannML or showSF2GannML or showSF3GannML)
+		[drawF1] = f_CalculateFn1(_pointX,_pointY,arrayXF0GannML,arrayYF0GannML,arrayXF1GannML,arrayYF1GannML)
+		f_CalculateDrawF(showF1GannML?drawF1:0,showSF1GannML,arrayLineF1GannML,arrayXF1GannML,arrayYF1GannML,showChoChF1GannML,arrayMarkChoChGannML,0,colorF1GannML)
+		if(drawF1 > 0 and (showF2GannML or showF3GannML or showSF1GannML or showSF2GannML or showSF3GannML))
+			[drawSF1] = f_CalculateSFn1(_pointX,_pointY,arrayMarkGannML,0,arraySXF1GannML,arraySYF1GannML)
+			f_CalculateDrawSF(showSF1GannML?drawSF1:0,arrayLineF1GannML,arraySLineF1GannML,arraySXF1GannML,arraySYF1GannML,showChoChSF1GannML,arrayMarkChoChGannML,1,colorF1GannML)
+			//f_CalculateDrawFF(showF1GannML?drawF1:0,showSF1GannML,arrayLineF1GannML,arrayXF1GannML,arrayYF1GannML,showChoChF1GannML,arrayMarkChoChGannML,0,colorF1GannML)
+
+			// if(drawSF1 > 0 and (showF2GannML or showF3GannML or showSF2GannML or showSF3GannML))
+			// 	[drawF2] = f_CalculateFn1(_pointX,_pointY,arraySXF1GannML,arraySYF1GannML,arrayXF2GannML,arrayYF2GannML)
+			// 	f_CalculateDrawF(showF2GannML?drawF2:0,showSF2GannML,arrayLineF2GannML,arrayXF2GannML,arrayYF2GannML,showChoChF2GannML,arrayMarkChoChGannML,2,colorF2GannML)
+				// if(drawF2 > 0 and (showF3GannML or showSF2GannML or showSF3GannML))
+				// 	[drawSF2] = f_CalculateSFn1(_pointX,_pointY,arrayMarkGannML,1,arraySXF2GannML,arraySYF2GannML)
+				// 	f_CalculateDrawSF(showSF2GannML?drawSF2:0,arrayLineF2GannML,arraySLineF2GannML,arraySXF2GannML,arraySYF2GannML,showChoChSF2GannML,arrayMarkChoChGannML,3,colorF2GannML)
+				// 	if(drawSF2 > 0 and (showF3GannML or showSF3GannML))
+				// 		[drawF3] = f_CalculateFn1(_pointX,_pointY,arraySXF2GannML,arraySYF2GannML,arrayXF3GannML,arrayYF3GannML)
+				// 		f_CalculateDrawF(showF3GannML?drawF3:0,showSF3GannML,arrayLineF3GannML,arrayXF3GannML,arrayYF3GannML,showChoChF3GannML,arrayMarkChoChGannML,4,colorF3GannML)
+				// 		if(drawF3 > 0 and (showSF3GannML))
+				// 			[drawSF3] = f_CalculateSFn1(_pointX,_pointY,arrayMarkGannML,2,arraySXF3GannML,arraySYF3GannML)
+				// 			f_CalculateDrawSF(showSF3GannML?drawSF3:0,arrayLineF3GannML,arraySLineF3GannML,arraySXF3GannML,arraySYF3GannML,showChoChSF3GannML,arrayMarkChoChGannML,5,colorF3GannML)
+
+f_CalculateAndDraw(_pointX,_pointY1,_pointY2) =>
+	if((array.get(arrayYF0GannML,0) > _pointY1 and array.get(arrayYF0GannML,0) > _pointY2) or (array.get(arrayYF0GannML,0) < _pointY1 and array.get(arrayYF0GannML,0) < _pointY2))
+		f_CalculateAndDrawFn1(time,array.get(arrayYF0GannML,1))
+	f_CalculateAndDrawFn1(time,_pointY1)
+	f_CalculateAndDrawFn1(time,_pointY2)
+	
+highPrev = high
+lowPrev = low
+// if(barstate.isconfirmed)
+	// if(high > highPrev[1] and low > lowPrev[1])
+	// 	f_CalculateAndDraw(time,low,high)
+	// else if(high < highPrev[1] and low < lowPrev[1])
+	// 	f_CalculateAndDraw(time,high,low)
+	// else if((close >= highPrev[1] and low < lowPrev[1]) or (high > highPrev[1] and close <= lowPrev[1]))
+	// 	//asd = true
+	// 	if(close > open)
+	// 		f_CalculateAndDraw(time,low,high)
+	// 	else
+	// 		f_CalculateAndDraw(time,high,low)
+	// else if(high[0] <= highPrev[1] and low[0] >= lowPrev[1])
+	// 	highPrev := highPrev[1]
+	// 	lowPrev := lowPrev[1]
+
+if(barstate.isconfirmed and useWithClose)
+	if(close > highPrev[1] and close > lowPrev[1])
+		f_CalculateAndDraw(time,low,high)
+	else if(close < highPrev[1] and close < lowPrev[1])
+		f_CalculateAndDraw(time,high,low)
+	else if((close >= highPrev[1] and close < lowPrev[1]) or (close > highPrev[1] and close <= lowPrev[1]))
+		//asd = true
+		if(close > open)
+			f_CalculateAndDraw(time,low,high)
+		else
+			f_CalculateAndDraw(time,high,low)
+	else if(high[0] <= highPrev[1] and low[0] >= lowPrev[1])
+		highPrev := highPrev[1]
+		lowPrev := lowPrev[1]
+else
+	if(high > highPrev[1] and low > lowPrev[1])
+		f_CalculateAndDraw(time,low,high)
+	else if(high < highPrev[1] and low < lowPrev[1])
+		f_CalculateAndDraw(time,high,low)
+	else if((close >= highPrev[1] and low < lowPrev[1]) or (high > highPrev[1] and close <= lowPrev[1]))
+		//asd = true
+		if(close > open)
+			f_CalculateAndDraw(time,low,high)
+		else
+			f_CalculateAndDraw(time,high,low)
+	else if(high[0] <= highPrev[1] and low[0] >= lowPrev[1])
+		highPrev := highPrev[1]
+		lowPrev := lowPrev[1]
+
+
+//arraySXF1GannML,arraySYF1GannML
+
+//log.info("{0} {1} {2} {3}", array.get(arraySXF1GannML,0), array.get(arraySXF1GannML,1), array.get(arraySYF1GannML,0), array.get(arraySYF1GannML,1))
+
+//log.info("{0} {1} {2} {3} {4}",array.get(arraySYF1GannML,0), array.get(arraySYF1GannML,1), array.get(arraySYF1GannML,2), array.get(arraySYF1GannML,3), array.get(arraySYF1GannML,4))
+
+confirmed_line_to = array.get(arraySXF1GannML,0)
+confirmed_line_from = array.get(arraySXF1GannML,3)
+confirmed_value0 = array.get(arraySYF1GannML,0)
+confirmed_value1 = array.get(arraySYF1GannML,1)
+confirmed_value2 = array.get(arraySYF1GannML,2)
+confirmed_value3 = array.get(arraySYF1GannML,3)
+confirmed_value4 = array.get(arraySYF1GannML,4)
+//barDifference = time1 / timeframe.in_seconds(timeframe.period) / 1000
+
+mid_level = (confirmed_value1 + confirmed_value2) / 2
+// + 5 * 1000 * timeframe.in_seconds(timeframe.period)
+
+line_color = confirmed_value1 > confirmed_value3 ? color.blue : color.red
+
+bull_market = (confirmed_value0 > confirmed_value1 and confirmed_value1 > confirmed_value2)
+bear_market = (confirmed_value0 < confirmed_value1 and confirmed_value0 < confirmed_value2)
+
+if bull_market or bear_market
+	line.new(confirmed_line_from, mid_level, confirmed_line_to + 5 * 1000 * timeframe.in_seconds(timeframe.period), mid_level, xloc = xloc.bar_time, color = line_color, width = solidLineWidth)
+
+// if drawRectangles
+// 	from = array.get(arraySXF1GannML, 2)
+// 	fromX = (time - from) / (1000 * timeframe.in_seconds(timeframe.period))
+// 	candleHighFromX = high[fromX]
+// 	candleLowFromX = low[fromX]
+
+// 	box.new(left=fromX, top=candleHighFromX,right=fromX + 5, bottom=candleLowFromX, bgcolor=na, border_color=color.gray, border_width=3)
+	// box.new(left=bar_index, top=math.max(high, high[1]),
+    //      right=bar_index + 5, bottom=math.min(low, low[1]),
+    //      bgcolor=na, border_color=color.gray, border_width=3)
+
+//colorasd = drawBullish ? color.blue : drawBearish ? color.red : color.gray
+//plotshape(true, title='ADX', color=colorasd, style=shape.square, location=location.top, size=size.small, text='')
