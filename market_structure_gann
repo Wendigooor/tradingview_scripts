@@ -1,14 +1,14 @@
 // This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
-// © meomeo105
+// © meomeo105 + wendigooor
 // Gann Swing Chart version 3.0
 //@version=5
-indicator('Gann Swing [Multi Layer] iii x2', shorttitle='GSC[ML] iii x2', overlay=true, max_lines_count=500, max_boxes_count = 500, max_labels_count = 500, max_bars_back = 5000)
+indicator('Gann Swing [Multi Layer] iii x4 htf', shorttitle='GSC[ML] iii x4 htf', overlay=true, max_lines_count=500, max_boxes_count = 500, max_labels_count = 500, max_bars_back = 5000)
 
 DefaultGannMLSetting = "[Gann][SGann][Color][ChoCh Gann][ChoCh SGann]"
-showF1GannML = input.bool(true,"", group = DefaultGannMLSetting,inline = "showF1GannML")
+showF1GannML = input.bool(false,"", group = DefaultGannMLSetting,inline = "showF1GannML")
 showSF1GannML = input.bool(true,"F1", group = DefaultGannMLSetting,inline = "showF1GannML")
 colorF1GannML = input.color(color.black, '', group = DefaultGannMLSetting,inline = "showF1GannML")
-showChoChF1GannML = input.bool(true,"", group = DefaultGannMLSetting,inline = "showF1GannML")
+showChoChF1GannML = input.bool(false,"", group = DefaultGannMLSetting,inline = "showF1GannML")
 showChoChSF1GannML = input.bool(true,"", group = DefaultGannMLSetting,inline = "showF1GannML")
 
 showF2GannML = input.bool(false,"", group = DefaultGannMLSetting,inline = "showF2GannML")
@@ -26,20 +26,27 @@ showChoChSF3GannML = input.bool(false,"", group = DefaultGannMLSetting,inline = 
 // showFibChoch = input.bool(true, 'Show Fib from prev CHoCH?')
 // show30and70levels = input.bool(true, 'Show 30 and 70 levels?')
 
-dottedLineWidth = input.int(2, 'Dotted Line Width')
-solidLineWidth = input.int(3, 'Solid Line Width')
-dashedLineWidth = input.int(2, 'Dashed Line Width')
+lineWidth = input.int(3, 'Line Width', group = "style", inline = "style")
+middlelineLength = input.int(10, '50% Line Length', group = "style", inline = "style")
+solidLineWidth = lineWidth
+dottedLineWidth = lineWidth
+dashedLineWidth = lineWidth
+// dottedLineWidth = input.int(3, 'Line Width', group = "style", inline = "style")
+// solidLineWidth = input.int(3, 'Solid Line Width')
+// dashedLineWidth = input.int(2, 'Dashed Line Width')
 
-drawRectangles = input.bool(true, 'Draw rectangles?')
-useWithClose = input.bool(false, 'Use with close?')
+drawRectangles = input.bool(true, 'Draw rectangles?', group = "funct")
+drawMarketDirection = input.bool(true, 'Draw market direction?', group = "funct")
+useWithClosedBar = input.bool(false, 'Use with bar close?', group = "funct")
 
-global_hhighs_llows = array.new_float(4)
 
-bool drawBullish = na
-drawBullish := na(drawBullish[1]) ? drawBullish[1] : na
+customTimeframe = input.timeframe("", title="Timeframe", group = "funct")
 
-bool drawBearish = na
-drawBearish := na(drawBearish[1]) ? drawBearish[1] : na
+customOpen = request.security(syminfo.tickerid, customTimeframe, open, lookahead = barmerge.lookahead_off)
+customHigh = request.security(syminfo.tickerid, customTimeframe, high, lookahead = barmerge.lookahead_off)
+customClose = request.security(syminfo.tickerid, customTimeframe, close, lookahead = barmerge.lookahead_off)
+customLow = request.security(syminfo.tickerid, customTimeframe, low, lookahead = barmerge.lookahead_off)
+
 
 f_CalculateF0(_pointX,_pointY,arrayX0,arrayY0)=>
 	array.unshift(arrayX0,_pointX)
@@ -178,24 +185,24 @@ f_CalculateDrawSF(_drawSF,arrayLine,arraySLine,arraySX,arraySY,showChoCh,arrayMC
 var arrayMarkGannML = array.new_float(3,0)
 var arrayMarkChoChGannML = array.new_float(6,0)
 var arrayXF0GannML = array.new_int(5,time)
-var arrayYF0GannML = array.new_float(5,close)
+var arrayYF0GannML = array.new_float(5,customClose)
 var arrayXF1GannML = array.new_int(5,time)
-var arrayYF1GannML = array.new_float(5,close)
+var arrayYF1GannML = array.new_float(5,customClose)
 var arrayLineF1GannML = array.new_line()
 var arraySXF1GannML = array.new_int(5,time)
-var arraySYF1GannML = array.new_float(5,close)
+var arraySYF1GannML = array.new_float(5,customClose)
 var arraySLineF1GannML = array.new_line()
 var arrayXF2GannML = array.new_int(5,time)
-var arrayYF2GannML = array.new_float(5,close)
+var arrayYF2GannML = array.new_float(5,customClose)
 var arrayLineF2GannML = array.new_line()
 var arraySXF2GannML = array.new_int(5,time)
-var arraySYF2GannML = array.new_float(5,close)
+var arraySYF2GannML = array.new_float(5,customClose)
 var arraySLineF2GannML = array.new_line()
 var arrayXF3GannML = array.new_int(5,time)
-var arrayYF3GannML = array.new_float(5,close)
+var arrayYF3GannML = array.new_float(5,customClose)
 var arrayLineF3GannML = array.new_line()
 var arraySXF3GannML = array.new_int(5,time)
-var arraySYF3GannML = array.new_float(5,close)
+var arraySYF3GannML = array.new_float(5,customClose)
 var arraySLineF3GannML = array.new_line()
 f_CalculateAndDrawFn1(_pointX,_pointY) =>
 	//F0 : Song cua nen
@@ -229,8 +236,8 @@ f_CalculateAndDraw(_pointX,_pointY1,_pointY2) =>
 	f_CalculateAndDrawFn1(time,_pointY1)
 	f_CalculateAndDrawFn1(time,_pointY2)
 	
-highPrev = high
-lowPrev = low
+highPrev = customHigh
+lowPrev = customLow
 // if(barstate.isconfirmed)
 	// if(high > highPrev[1] and low > lowPrev[1])
 	// 	f_CalculateAndDraw(time,low,high)
@@ -246,40 +253,35 @@ lowPrev = low
 	// 	highPrev := highPrev[1]
 	// 	lowPrev := lowPrev[1]
 
-if(barstate.isconfirmed and useWithClose)
-	if(close > highPrev[1] and close > lowPrev[1])
-		f_CalculateAndDraw(time,low,high)
-	else if(close < highPrev[1] and close < lowPrev[1])
-		f_CalculateAndDraw(time,high,low)
-	else if((close >= highPrev[1] and close < lowPrev[1]) or (close > highPrev[1] and close <= lowPrev[1]))
-		//asd = true
-		if(close > open)
-			f_CalculateAndDraw(time,low,high)
+if(barstate.isconfirmed and useWithClosedBar)
+	if(customClose > highPrev[1] and customClose > lowPrev[1])
+		f_CalculateAndDraw(time,customLow,customHigh)
+	else if(customClose < highPrev[1] and customClose < lowPrev[1])
+		f_CalculateAndDraw(time,customHigh,customLow)
+	else if((customClose >= highPrev[1] and customClose < lowPrev[1]) or (customClose > highPrev[1] and customClose <= lowPrev[1]))
+		if(customClose > customOpen)
+			f_CalculateAndDraw(time,customLow,customHigh)
 		else
-			f_CalculateAndDraw(time,high,low)
-	else if(high[0] <= highPrev[1] and low[0] >= lowPrev[1])
+			f_CalculateAndDraw(time,customHigh,customLow)
+	else if(customHigh[0] <= highPrev[1] and customLow[0] >= lowPrev[1])
 		highPrev := highPrev[1]
 		lowPrev := lowPrev[1]
 else
-	if(high > highPrev[1] and low > lowPrev[1])
-		f_CalculateAndDraw(time,low,high)
-	else if(high < highPrev[1] and low < lowPrev[1])
-		f_CalculateAndDraw(time,high,low)
-	else if((close >= highPrev[1] and low < lowPrev[1]) or (high > highPrev[1] and close <= lowPrev[1]))
-		//asd = true
-		if(close > open)
-			f_CalculateAndDraw(time,low,high)
+	if(customHigh > highPrev[1] and customLow > lowPrev[1])
+		f_CalculateAndDraw(time,customLow,customHigh)
+	else if(customHigh < highPrev[1] and customLow < lowPrev[1])
+		f_CalculateAndDraw(time,customHigh,customLow)
+	else if((customClose >= highPrev[1] and customLow < lowPrev[1]) or (customHigh > highPrev[1] and customClose <= lowPrev[1]))
+		if(customClose > customOpen)
+			f_CalculateAndDraw(time,customLow,customHigh)
 		else
-			f_CalculateAndDraw(time,high,low)
-	else if(high[0] <= highPrev[1] and low[0] >= lowPrev[1])
+			f_CalculateAndDraw(time,customHigh,customLow)
+	else if(customHigh[0] <= highPrev[1] and customLow[0] >= lowPrev[1])
 		highPrev := highPrev[1]
 		lowPrev := lowPrev[1]
 
 
 //arraySXF1GannML,arraySYF1GannML
-
-//log.info("{0} {1} {2} {3}", array.get(arraySXF1GannML,0), array.get(arraySXF1GannML,1), array.get(arraySYF1GannML,0), array.get(arraySYF1GannML,1))
-
 //log.info("{0} {1} {2} {3} {4}",array.get(arraySYF1GannML,0), array.get(arraySYF1GannML,1), array.get(arraySYF1GannML,2), array.get(arraySYF1GannML,3), array.get(arraySYF1GannML,4))
 
 confirmed_line_to = array.get(arraySXF1GannML,0)
@@ -289,33 +291,34 @@ confirmed_value1 = array.get(arraySYF1GannML,1)
 confirmed_value2 = array.get(arraySYF1GannML,2)
 confirmed_value3 = array.get(arraySYF1GannML,3)
 confirmed_value4 = array.get(arraySYF1GannML,4)
-//barDifference = time1 / timeframe.in_seconds(timeframe.period) / 1000
 
 mid_level = (confirmed_value1 + confirmed_value2) / 2
-// + 5 * 1000 * timeframe.in_seconds(timeframe.period)
 
-// line_color = confirmed_value0 > confirmed_value3 ? color.blue : color.red
+bull_market = (customClose[1] > confirmed_value1 and customClose[1] > confirmed_value2)
+bear_market = (customClose[1] < confirmed_value1 and customClose[1] < confirmed_value2)
 
-bull_market = (confirmed_value0 > confirmed_value1 and confirmed_value0 > confirmed_value2)
-bear_market = (confirmed_value0 < confirmed_value1 and confirmed_value0 < confirmed_value2)
+market_direction_color = bull_market ? color.blue : color.red
 
-line_color = bull_market ? color.blue : color.red
+prevBullishBOSbar = ta.barssince(bull_market)
+prevBearishBOSbar = ta.barssince(bear_market)
+bull_market_state = prevBearishBOSbar > prevBullishBOSbar
+market_state_color = bull_market_state ? color.blue : color.red
+//log.info("{0} {1} {2}", prevBullishBOSbar, prevBearishBOSbar, prevBearishBOSbar > prevBullishBOSbar)
 
-//log.info("{0} {1}", bull_market, bear_market)
+
+
+
+// drawings
 
 if bull_market or bear_market
-	line.new(confirmed_line_from, mid_level, confirmed_line_to + 5 * 1000 * timeframe.in_seconds(timeframe.period), mid_level, xloc = xloc.bar_time, color = line_color, width = solidLineWidth)
+	line.new(confirmed_line_from, mid_level, confirmed_line_to + middlelineLength * 1000 * timeframe.in_seconds(timeframe.period), mid_level, xloc = xloc.bar_time, color = market_direction_color, width = solidLineWidth)
 
-// if drawRectangles
-// 	from = array.get(arraySXF1GannML, 2)
-// 	fromX = (time - from) / (1000 * timeframe.in_seconds(timeframe.period))
-// 	candleHighFromX = high[fromX]
-// 	candleLowFromX = low[fromX]
+if drawRectangles and (bull_market or bear_market)
+	left = array.get(arraySXF1GannML, 2)
+	right = left + 5  * 1000 * timeframe.in_seconds(timeframe.period)
+	top = bull_market ? confirmed_value2 : confirmed_value1
+	bottom = bull_market ? confirmed_value1 : confirmed_value2
+	boxBgColor = bull_market ? color.new(color.blue, 85) : color.new(color.red, 85)
+	box.new(left = left, top = top, right = right, bottom = bottom, xloc=xloc.bar_time, bgcolor = boxBgColor, border_color = boxBgColor)
 
-// 	box.new(left=fromX, top=candleHighFromX,right=fromX + 5, bottom=candleLowFromX, bgcolor=na, border_color=color.gray, border_width=3)
-	// box.new(left=bar_index, top=math.max(high, high[1]),
-    //      right=bar_index + 5, bottom=math.min(low, low[1]),
-    //      bgcolor=na, border_color=color.gray, border_width=3)
-
-//colorasd = drawBullish ? color.blue : drawBearish ? color.red : color.gray
-//plotshape(true, title='ADX', color=colorasd, style=shape.square, location=location.top, size=size.small, text='')
+plotshape(drawMarketDirection, title='MarketDirection', color=market_state_color, style=shape.square, location=location.top, size=size.small, text='')
