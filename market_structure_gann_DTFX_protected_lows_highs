@@ -2,7 +2,9 @@
 // © meomeo105 + wendigooor
 // Gann Swing Chart version 3.0
 //@version=5
-indicator('Market Structure | Gann | Protected Highs and Lows | DTFX', overlay=true, max_lines_count=500, max_boxes_count = 500, max_labels_count = 500, max_bars_back = 5000)
+indicator('Market Structure | DTFX [@wendigooor]', overlay=true, max_lines_count=500, max_boxes_count = 500, max_labels_count = 500, max_bars_back = 5000)
+
+//
 
 DefaultGannMLSetting = "[Gann][SGann][Color][ChoCh Gann][ChoCh SGann]"
 showF1GannML = input.bool(false,"", group = DefaultGannMLSetting,inline = "showF1GannML")
@@ -24,81 +26,31 @@ showChoChF3GannML = false // input.bool(false,"", group = DefaultGannMLSetting,i
 showChoChSF3GannML = false // input.bool(false,"", group = DefaultGannMLSetting,inline = "showF3GannML")
 
 lineWidth = input.int(3, 'Line Width', group = "style", inline = "style")
-drawMiddleLine = input.bool(true, 'Draw 50% line?', group = "style", inline = "style")
-middlelineLength = input.int(10, '50% Line Length', group = "style", inline = "style")
-bullColor = input.color(color.blue, 'Bull Color', group = "style", inline = "style")
-bearColor = input.color(color.red, 'Bull Color', group = "style", inline = "style")
-rectangleOpacity = input.int(85, 'Rectangle Opacity', group = "style", inline = "style")
+
+drawMiddleLine = input.bool(true, 'Draw 50% line?', group = "style", inline = "style1")
+middlelineLength = input.int(20, '50% Line Length', group = "style", inline = "style1")
+bullColor = input.color(color.blue, 'Bull Color', group = "style", inline = "style2")
+bearColor = input.color(color.red, 'Bear Color', group = "style", inline = "style2")
+drawRectangles = input.bool(true, 'Draw rectangles?', group = "style", inline = "style3")
+rectangleOpacity = input.int(85, 'Rectangle Opacity', group = "style", inline = "style3")
 
 solidLineWidth = lineWidth
 dottedLineWidth = lineWidth
 dashedLineWidth = lineWidth
-// dottedLineWidth = input.int(3, 'Line Width', group = "style", inline = "style")
-// solidLineWidth = input.int(3, 'Solid Line Width')
-// dashedLineWidth = input.int(2, 'Dashed Line Width')
 
-drawRectangles = input.bool(true, 'Draw rectangles?', group = "funct")
 drawMarketDirection = input.bool(false, 'Draw market direction?', group = "funct")
-useHighsLowsToDrawLines = input.bool(true, 'Use Highs/Lows for BOS/CHoCH? (only for lines)')
-useWithClosedBar = false // input.bool(false, 'Use with bar close?', group = "funct")
+pullbackWithCloseBar = input.bool(false, 'Use Close bar for Pullback calculation?', group = "funct")
+minErrorMeasurementPoints = input.float(4, 'Ticks numb to skip for BoS/CHoCH validation', group = 'Min Meausurement Ticks Error (avoid Equal Highs/Lows)') * syminfo.mintick
+minErrorMeasurementPointsHighsLows = input.float(4, 'Ticks numb to skip for Highs/Lows', group = 'Min Meausurement Ticks Error (avoid Equal Highs/Lows)') * syminfo.mintick
+useMeasurementPointsErrorsForBosDrawings = input.bool(false, 'Use Meausurement Points Errors for BOS Drawings?')
+useWicksForFlip = input.bool(false, 'Use Wicks For Flips? (draw 50% line on each zone)')
 
-customTimeframe = input.timeframe("", title="Timeframe", group = "funct")
-
-
-
-
-
-
-
-indexHighTF = barstate.isrealtime ? 1 : 0
-indexCurrTF = barstate.isrealtime ? 0 : 1
-
-f_secureSecurity1(_symbol, _res, _src) =>
-    request.security(_symbol, _res, _src[indexHighTF], lookahead = barmerge.lookahead_on)
-
-f_secureSecurity2(_symbol, _res, _src) =>
-	request.security(_symbol, _res, _src[indexHighTF], lookahead = barmerge.lookahead_off)
-
-customOpen = barstate.isrealtime ? f_secureSecurity1(syminfo.tickerid, customTimeframe, open) : f_secureSecurity2(syminfo.tickerid, customTimeframe, open)
-customHigh = barstate.isrealtime ? f_secureSecurity1(syminfo.tickerid, customTimeframe, high) : f_secureSecurity2(syminfo.tickerid, customTimeframe, high)
-customLow = barstate.isrealtime ? f_secureSecurity1(syminfo.tickerid, customTimeframe, low) : f_secureSecurity2(syminfo.tickerid, customTimeframe, low)
-customClose = barstate.isrealtime ? f_secureSecurity1(syminfo.tickerid, customTimeframe, close) : f_secureSecurity2(syminfo.tickerid, customTimeframe, close)
+customOpen = open
+customClose = close
+customHigh = high
+customLow = low
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-// indexHighTF = barstate.isrealtime ? 1 : 0
-// indexCurrTF = barstate.isrealtime ? 0 : 1
-
-// customOpen = request.security(syminfo.tickerid, customTimeframe, open[indexHighTF], lookahead = barmerge.lookahead_off)
-// customHigh = request.security(syminfo.tickerid, customTimeframe, high[indexHighTF], lookahead = barmerge.lookahead_off)
-// customClose = request.security(syminfo.tickerid, customTimeframe, close[indexHighTF], lookahead = barmerge.lookahead_off)
-// customLow = request.security(syminfo.tickerid, customTimeframe, low[indexHighTF], lookahead = barmerge.lookahead_off)
-
-
-///
-// indexHighTF = barstate.isrealtime ? 1 : 0
-// f_secureSecurity(_symbol, _res, _src) =>
-//     request.security(_symbol, _res, _src[indexHighTF], lookahead = barmerge.lookahead_on)
-
-// customOpen = f_secureSecurity(syminfo.tickerid, customTimeframe, open)
-// customHigh = f_secureSecurity(syminfo.tickerid, customTimeframe, high)
-// customLow = f_secureSecurity(syminfo.tickerid, customTimeframe, low)
-// customClose = f_secureSecurity(syminfo.tickerid, customTimeframe, close)
-
-///
 
 
 f_CalculateF0(_pointX,_pointY,arrayX0,arrayY0)=>
@@ -207,33 +159,9 @@ f_CalculateDrawSF(_drawSF,arrayLine,arraySLine,arraySX,arraySY,showChoCh,arrayMC
 		f_CalculateRemoveDuplicateLine(arrayLine,arraySLine)
 		[XChoChS,YChoChS] = f_CalculateChoCh(arraySX,arraySY)
 
-		//log.info("{0} {1}", array.get(arrayYF0GannML,0), array.get(arrayYF0GannML,0))
-
 		if(showChoCh and YChoChS >0 and array.get(arrayMChoCh,idxChoCh) != YChoChS)
 			array.set(arrayMChoCh,idxChoCh,YChoChS)
 			line.new(XChoChS,YChoChS,time,YChoChS, color = _color,xloc = xloc.bar_time,width = dashedLineWidth,style = line.style_dashed)
-
-			//log.info("{0} {1}", XChoChS, YChoChS)
-			//global_llows := 123
-			//array.set(global_hhighs_llows, 0, )
-    		//array.set(global_hhighs_llows, IDX_RSI, v_rsi)
-
-			// if showFibChoch
-			// 	//anchorBarIndex = 0
-			// 	//anchorBarIndex := time / (1000 * timeframe.in_seconds(timeframe.period))
-  			// 	//anchorBarsBack := bar_index - anchorBarIndex 
-			// 	barDifference = (time - XChoChS) / timeframe.in_seconds(timeframe.period) / 1000
-			// 	//log.info("XChoChS {0} YChoChS: {1}, time: {2}, xloc.bar_time: {3}, anchorBarIndex: {4}", XChoChS, YChoChS, time, xloc.bar_time, barDifference)
-			// 	// line.new(left_value, line_level, right_value + 10, line_level, color=color.blue)
-			// 	//if XChoChS > YChoChS
-			// 	//line.new(bar_index - barDifference, bar_index + 5, time, YChoChS - 10, xloc = xloc.bar_time)
-			// 	if barDifference < 500
-			// 		lowest = ta.lowest(barDifference)
-			// 		highest = ta.highest(barDifference)
-			// 		//log.info("{0} {1}", lowest, highest)
-			// 		//mid_level = (lowest + highest) / 2
-			// 		mid_level = (XChoChS + YChoChS) / 2
-			// 		line.new(XChoChS, mid_level, time + 5 * 1000 * timeframe.in_seconds(timeframe.period), mid_level, xloc = xloc.bar_time)
 
 var arrayMarkGannML = array.new_float(3,0)
 var arrayMarkChoChGannML = array.new_float(6,0)
@@ -249,18 +177,6 @@ var arraySLineF1GannML = array.new_line()
 
 var arrayLineMiddlePoint = array.new_line(50)
 
-// var arrayXF2GannML = array.new_int(5,time)
-// var arrayYF2GannML = array.new_float(5,customClose)
-// var arrayLineF2GannML = array.new_line()
-// var arraySXF2GannML = array.new_int(5,time)
-// var arraySYF2GannML = array.new_float(5,customClose)
-// var arraySLineF2GannML = array.new_line()
-// var arrayXF3GannML = array.new_int(5,time)
-// var arrayYF3GannML = array.new_float(5,customClose)
-// var arrayLineF3GannML = array.new_line()
-// var arraySXF3GannML = array.new_int(5,time)
-// var arraySYF3GannML = array.new_float(5,customClose)
-// var arraySLineF3GannML = array.new_line()
 f_CalculateAndDrawFn1(_pointX,_pointY) =>
 	//F0 : Song cua nen
 	array.unshift(arrayXF0GannML,_pointX)
@@ -272,20 +188,6 @@ f_CalculateAndDrawFn1(_pointX,_pointY) =>
 		if(drawF1 > 0 and (showF2GannML or showF3GannML or showSF1GannML or showSF2GannML or showSF3GannML))
 			[drawSF1] = f_CalculateSFn1(_pointX,_pointY,arrayMarkGannML,0,arraySXF1GannML,arraySYF1GannML)
 			f_CalculateDrawSF(showSF1GannML?drawSF1:0,arrayLineF1GannML,arraySLineF1GannML,arraySXF1GannML,arraySYF1GannML,showChoChSF1GannML,arrayMarkChoChGannML,1,colorF1GannML)
-			//f_CalculateDrawFF(showF1GannML?drawF1:0,showSF1GannML,arrayLineF1GannML,arrayXF1GannML,arrayYF1GannML,showChoChF1GannML,arrayMarkChoChGannML,0,colorF1GannML)
-
-			// if(drawSF1 > 0 and (showF2GannML or showF3GannML or showSF2GannML or showSF3GannML))
-			// 	[drawF2] = f_CalculateFn1(_pointX,_pointY,arraySXF1GannML,arraySYF1GannML,arrayXF2GannML,arrayYF2GannML)
-			// 	f_CalculateDrawF(showF2GannML?drawF2:0,showSF2GannML,arrayLineF2GannML,arrayXF2GannML,arrayYF2GannML,showChoChF2GannML,arrayMarkChoChGannML,2,colorF2GannML)
-				// if(drawF2 > 0 and (showF3GannML or showSF2GannML or showSF3GannML))
-				// 	[drawSF2] = f_CalculateSFn1(_pointX,_pointY,arrayMarkGannML,1,arraySXF2GannML,arraySYF2GannML)
-				// 	f_CalculateDrawSF(showSF2GannML?drawSF2:0,arrayLineF2GannML,arraySLineF2GannML,arraySXF2GannML,arraySYF2GannML,showChoChSF2GannML,arrayMarkChoChGannML,3,colorF2GannML)
-				// 	if(drawSF2 > 0 and (showF3GannML or showSF3GannML))
-				// 		[drawF3] = f_CalculateFn1(_pointX,_pointY,arraySXF2GannML,arraySYF2GannML,arrayXF3GannML,arrayYF3GannML)
-				// 		f_CalculateDrawF(showF3GannML?drawF3:0,showSF3GannML,arrayLineF3GannML,arrayXF3GannML,arrayYF3GannML,showChoChF3GannML,arrayMarkChoChGannML,4,colorF3GannML)
-				// 		if(drawF3 > 0 and (showSF3GannML))
-				// 			[drawSF3] = f_CalculateSFn1(_pointX,_pointY,arrayMarkGannML,2,arraySXF3GannML,arraySYF3GannML)
-				// 			f_CalculateDrawSF(showSF3GannML?drawSF3:0,arrayLineF3GannML,arraySLineF3GannML,arraySXF3GannML,arraySYF3GannML,showChoChSF3GannML,arrayMarkChoChGannML,5,colorF3GannML)
 
 f_CalculateAndDraw(_pointX,_pointY1,_pointY2) =>
 	if((array.get(arrayYF0GannML,0) > _pointY1 and array.get(arrayYF0GannML,0) > _pointY2) or (array.get(arrayYF0GannML,0) < _pointY1 and array.get(arrayYF0GannML,0) < _pointY2))
@@ -293,72 +195,29 @@ f_CalculateAndDraw(_pointX,_pointY1,_pointY2) =>
 	f_CalculateAndDrawFn1(time,_pointY1)
 	f_CalculateAndDrawFn1(time,_pointY2)
 	
-// highPrev = customHigh
-// lowPrev = customLow
-// if(barstate.isconfirmed)
-	// if(high > highPrev[1] and low > lowPrev[1])
-	// 	f_CalculateAndDraw(time,low,high)
-	// else if(high < highPrev[1] and low < lowPrev[1])
-	// 	f_CalculateAndDraw(time,high,low)
-	// else if((close >= highPrev[1] and low < lowPrev[1]) or (high > highPrev[1] and close <= lowPrev[1]))
-	// 	//asd = true
-	// 	if(close > open)
-	// 		f_CalculateAndDraw(time,low,high)
-	// 	else
-	// 		f_CalculateAndDraw(time,high,low)
-	// else if(high[0] <= highPrev[1] and low[0] >= lowPrev[1])
-	// 	highPrev := highPrev[1]
-	// 	lowPrev := lowPrev[1]
 
-// if (barstate.isconfirmed and useWithClosedBar)
-// 	log.info("{0} {1} {2} {3} {4}", customLow, customHigh, customClose, close, lowPrev[1])
-// 	//log.info("{0} {1} {2} {3}", customClose, highPrev[1], customClose, lowPrev[1])
-// 	if(high >= highPrev[1] and low > lowPrev[1])
-// 		f_CalculateAndDraw(time,customLow,customHigh)
-// 	else if(high < highPrev[1] and low <= lowPrev[1])
-// 		f_CalculateAndDraw(time,customHigh,customLow)
-// 	else if((customHigh >= highPrev[1] and customLow < lowPrev[1]) or (customHigh > highPrev[1] and customLow <= lowPrev[1]))
-// 		if(customClose > customOpen)
-// 			f_CalculateAndDraw(time,customLow,customHigh)
-// 		else
-// 			f_CalculateAndDraw(time,customHigh,customLow)
-// 	else if(customHigh[0] <= highPrev[1] and customLow[0] >= lowPrev[1])
-// 		highPrev := highPrev[1]
-// 		lowPrev := lowPrev[1]
-// else
-
-
-
-
-// highPrev = customHigh
-// lowPrev = customLow
 highPrev = high
 lowPrev = low
 
 if barstate.isconfirmed
-	if(high >= highPrev[1] and low > lowPrev[1])
+	if((pullbackWithCloseBar ? close : high) > highPrev[1] and low > lowPrev[1])
 		f_CalculateAndDraw(time,customLow,customHigh)
-	else if(high < highPrev[1] and low <= lowPrev[1])
+	else if(high < highPrev[1] and (pullbackWithCloseBar ? close : low) < lowPrev[1])
 		f_CalculateAndDraw(time,customHigh,customLow)
 	else if((close >= highPrev[1] and low < lowPrev[1]) or (high > highPrev[1] and close <= lowPrev[1]))
 		if(close > open)
 			f_CalculateAndDraw(time,customLow,customHigh)
 		else
 			f_CalculateAndDraw(time,customHigh,customLow)
-	else if(high[0] <= highPrev[1] and low[0] >= lowPrev[1]) // else if(customHigh[0] <= highPrev[1] and customLow[0] >= lowPrev[1])
+	// else if (high <= highPrev[1] or low >= lowPrev[1]) 
+	// // // else if(high[0] <= highPrev[1] and low[0] >= lowPrev[1]) // else if(customHigh[0] <= highPrev[1] and customLow[0] >= lowPrev[1])
+	// 	highPrev := highPrev[1]
+	// 	lowPrev := lowPrev[1]
+
+	if ((high - minErrorMeasurementPointsHighsLows) <= highPrev[1] and (low + minErrorMeasurementPointsHighsLows) >= lowPrev[1])
 		highPrev := highPrev[1]
 		lowPrev := lowPrev[1]
-
-
-
-// log.info("{0}", lines.all)
-
-// for [index, value] in line.all
-// 	log.info("{0} {1}", index)
-
-
-//arraySXF1GannML,arraySYF1GannML
-//log.info("{0} {1} {2} {3} {4}",array.get(arraySYF1GannML,0), array.get(arraySYF1GannML,1), array.get(arraySYF1GannML,2), array.get(arraySYF1GannML,3), array.get(arraySYF1GannML,4))
+	
 
 confirmed_line_to = array.get(arraySXF1GannML,0)
 confirmed_line_from = array.get(arraySXF1GannML,2)
@@ -370,50 +229,43 @@ confirmed_value4 = array.get(arraySYF1GannML,4)
 
 mid_level = (confirmed_value1 + confirmed_value2) / 2
 
-bull_market = (customClose[1] > confirmed_value1 and (useHighsLowsToDrawLines ? (customHigh[1] > confirmed_value2) : (customClose[1] > confirmed_value2)) )
-bear_market = (customClose[1] < confirmed_value1 and (useHighsLowsToDrawLines ? (customLow[1] < confirmed_value2) : (customClose[1] < confirmed_value2)) )
+bull_market = (customHigh[1] > confirmed_value1) and (customHigh[1] > confirmed_value2)
+bear_market = (customLow[1] < confirmed_value1) and (customLow[1] < confirmed_value2)
+
+bullBosFlipConfirmationCandleValue = ((useWicksForFlip ? high : close) - (useMeasurementPointsErrorsForBosDrawings ? minErrorMeasurementPoints : 0))
+bearBosFlipConfirmationCandleValue = ((useWicksForFlip ? low : close) + (useMeasurementPointsErrorsForBosDrawings ? minErrorMeasurementPoints : 0))
+
+bullBOS = confirmed_value0 > confirmed_value2 and confirmed_value0 > confirmed_value1 and ( bullBosFlipConfirmationCandleValue > confirmed_value2) and barstate.isconfirmed
+bearBOS = confirmed_value0 < confirmed_value2 and confirmed_value0 < confirmed_value1 and ( bearBosFlipConfirmationCandleValue < confirmed_value2) and barstate.isconfirmed
 
 market_direction_color = bull_market ? bullColor : bearColor
 
-prevBullishBOSbar = ta.barssince(bull_market)
-prevBearishBOSbar = ta.barssince(bear_market)
+prevBullishBOSbar = ta.barssince(bullBOS)
+prevBearishBOSbar = ta.barssince(bearBOS)
 bull_market_state = prevBearishBOSbar > prevBullishBOSbar
 market_state_color = bull_market_state ? bullColor : bearColor
 //log.info("{0} {1} {2}", prevBullishBOSbar, prevBearishBOSbar, prevBearishBOSbar > prevBullishBOSbar)
 
-
-
+// log.info("{0} {1} {2} {3} {4} {5}", bullBOS, bearBOS, confirmed_value0, confirmed_value1, confirmed_value2)
 
 // drawings
-if drawMiddleLine and (bull_market or bear_market)
+if drawMiddleLine and (bullBOS or bearBOS)
 	arraySize = array.size(arrayLineMiddlePoint)
 	lastLineElement = array.get(arrayLineMiddlePoint, arraySize - 1)
-	// log.info("{0} {1}", lastLineElement.get_x1(), confirmed_line_from )
 
 	if na(lastLineElement) or (lastLineElement.get_x1() != confirmed_line_from)
-		array.push(arrayLineMiddlePoint, line.new(confirmed_line_from, mid_level, confirmed_line_to + middlelineLength * 1000 * timeframe.in_seconds(timeframe.period), mid_level, xloc = xloc.bar_time, color = market_direction_color, width = solidLineWidth))
+		newLine = line.new(confirmed_line_from, mid_level, confirmed_line_to + middlelineLength * 1000 * timeframe.in_seconds(timeframe.period), mid_level, xloc = xloc.bar_time, color = market_state_color, width = solidLineWidth)
+		array.push(arrayLineMiddlePoint, newLine)
 
 
-// EXtEND lines unless cross the price
-// for i = 0 to array.size(arrayLineMiddlePoint) - 1
-//     line l = array.get(arrayLineMiddlePoint, i)
-
-
-
-// LINES HAS A LIMIT, could be somehow rewrited to "plot"
-//plot(drawMiddleLine and bull_market and bull_market_state ? mid_level : na, "Gray dot on `low`", color.blue, 2, plot.style_line)
-
-
-
-
-if drawRectangles and (bull_market or bear_market)
+if drawRectangles and (bullBOS or bearBOS)
 	left = array.get(arraySXF1GannML, 2)
 
 	if left != left[1] // do not draw the same rectangle x times
 		right = array.get(arraySXF1GannML, 1)
 		top = bull_market ? confirmed_value2 : confirmed_value1
 		bottom = bull_market ? confirmed_value1 : confirmed_value2
-		boxBgColor = bull_market ? color.new(bullColor, rectangleOpacity) : color.new(bearColor, rectangleOpacity)
+		boxBgColor = color.new(market_state_color, rectangleOpacity)
 		box.new(left = left, top = top, right = right, bottom = bottom, xloc=xloc.bar_time, bgcolor = boxBgColor, border_color = boxBgColor)
 
 plotshape(drawMarketDirection, title='MarketDirection', color=market_state_color, style=shape.square, location=location.top, size=size.small, text='')
